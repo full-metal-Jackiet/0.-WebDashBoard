@@ -1,0 +1,1920 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Market Wave Lab — Stock Normalize + FFT</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#06121a;
+  --bg2:#0a1822;
+  --panel:#101f2c;
+  --panel2:#0c1821;
+  --text:#e8f2f7;
+  --muted:#a1b4c1;
+  --line:rgba(166,208,224,.18);
+  --accent:#62e2d1;
+  --accent2:#f2bf68;
+  --danger:#ff6e85;
+  --radius:18px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(circle at top left,rgba(98,226,209,.16),transparent 30%),
+    radial-gradient(circle at top right,rgba(242,191,104,.12),transparent 28%),
+    linear-gradient(180deg,var(--bg),var(--bg2));
+}
+.app{
+  display:grid;
+  grid-template-columns:minmax(320px,390px) minmax(0,1fr);
+  gap:16px;
+  padding:14px;
+  min-height:100vh;
+}
+.left{
+  background:linear-gradient(180deg,rgba(16,31,44,.96),rgba(9,20,29,.98));
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  overflow:auto;
+  max-height:calc(100vh - 28px);
+  box-shadow:0 20px 60px rgba(0,0,0,.22);
+}
+.right{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{
+  background:linear-gradient(180deg,rgba(16,31,44,.9),rgba(9,20,29,.94));
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:14px;
+  box-shadow:0 18px 42px rgba(0,0,0,.16);
+}
+.pill{
+  display:inline-flex;
+  border:1px solid rgba(98,226,209,.28);
+  background:rgba(98,226,209,.1);
+  color:var(--accent);
+  border-radius:999px;
+  padding:7px 10px;
+  font-size:12px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+h1{font-size:27px;line-height:.98;margin:14px 0 8px;letter-spacing:-.04em}
+h2{margin:0 0 8px;font-size:13px;letter-spacing:.12em;text-transform:uppercase}
+.sub,.hint,.status{color:var(--muted);font-size:13px;line-height:1.45}
+.section{border-top:1px solid rgba(255,255,255,.07);padding-top:14px;margin-top:14px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.field{display:grid;gap:6px}
+label{font-size:12px;color:#c7d6df}
+input,select,textarea{
+  width:100%;
+  border:1px solid rgba(255,255,255,.1);
+  background:#071019;
+  color:var(--text);
+  border-radius:10px;
+  padding:9px 10px;
+}
+textarea{min-height:92px;resize:vertical}
+.button-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+button{
+  border:1px solid rgba(255,255,255,.13);
+  background:rgba(255,255,255,.05);
+  color:var(--text);
+  border-radius:11px;
+  padding:9px 11px;
+  cursor:pointer;
+}
+button:hover{border-color:rgba(98,226,209,.45);background:rgba(98,226,209,.09)}
+button.primary{background:rgba(98,226,209,.17);border-color:rgba(98,226,209,.4)}
+button.danger{background:rgba(255,110,133,.11);border-color:rgba(255,110,133,.35)}
+.chart-card{min-height:300px}
+.chart-title{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:8px}
+.chart-title p{margin:0;color:var(--muted);font-size:13px}
+.chart-title small{color:var(--muted)}
+canvas{
+  width:100%;
+  height:250px;
+  border-radius:14px;
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));
+  display:block;
+}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.metric{
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  background:rgba(255,255,255,.025);
+  padding:12px;
+}
+.metric .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.metric .v{font-size:18px;font-weight:700;margin-top:4px;overflow-wrap:anywhere}
+.peak-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.peak-table th,.peak-table td{border-bottom:1px solid rgba(255,255,255,.08);padding:8px 9px;text-align:right;white-space:nowrap}
+.peak-table th:first-child,.peak-table td:first-child{text-align:left}
+.peak-table th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.peak-table td{color:var(--text)}
+.peak-table tbody tr{cursor:pointer}
+.peak-table tbody tr:hover{background:rgba(98,226,209,.08)}
+.peak-table tbody tr.selected{background:rgba(98,226,209,.16)}
+.peak-note{color:var(--muted);font-size:12px;line-height:1.45;margin-top:8px}
+.selected-peak{border:1px solid rgba(98,226,209,.22);border-radius:14px;background:rgba(98,226,209,.05);padding:12px;margin-top:10px}
+.selected-peak .title{font-weight:700;margin-bottom:6px}
+.selected-peak .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.selected-peak .cell{font-size:12px;color:var(--muted)}
+.selected-peak .cell b{display:block;color:var(--text);font-size:15px;margin-top:3px}
+.note{
+  border-left:3px solid var(--accent2);
+  padding-left:10px;
+  color:#dfc891;
+  font-size:12px;
+  line-height:1.45;
+}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media(max-width:1000px){
+  .app{grid-template-columns:1fr}
+  .left{max-height:none}
+  .metrics{grid-template-columns:1fr 1fr}
+}
+@media(max-width:620px){
+  .row,.metrics{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="left">
+    <span class="pill">Market Wave Lab</span>
+    <h1>Stock normalize + FFT</h1>
+    <div class="sub">Load real daily stock data through the local helper server, then normalize trend and run exact DFT on the residual wave.</div>
+
+    <div class="section">
+      <h2>Data source</h2>
+      <div class="row">
+        <div class="field">
+          <label>Ticker</label>
+          <input id="ticker" value="AAPL" placeholder="AAPL, NVDA, TSLA" />
+        </div>
+        <div class="field">
+          <label>Window points</label>
+          <input id="windowPoints" type="number" min="32" max="50000" step="1" value="20000" />
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="loadTicker" class="primary">Load ticker</button>
+      </div>
+      <div id="loadStatus" class="status" style="margin-top:10px">Load a ticker through the local server.</div>
+    </div>
+
+    <div class="section">
+      <h2>Log normalization</h2>
+      <div class="hint">Log transform and residual scaling are kept on the internal defaults used by the analysis pipeline.</div>
+    </div>
+
+    <div class="section">
+      <h2>Linear normalization</h2>
+      <div class="row">
+        <div class="field">
+          <label>Linear fit mode</label>
+          <select id="trendFitMode">
+            <option value="endpoints">Fit first + last</option>
+            <option value="leastSquares" selected>Least squares</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Manual trend slope ×</label>
+          <input id="trendSlopeMultiplier" type="number" min="-5" max="5" step="0.05" value="1" />
+        </div>
+        <div class="field">
+          <label>Manual trend offset</label>
+          <input id="trendOffset" type="number" min="-100000" max="100000" step="0.01" value="0" />
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="trendFitEndpoints" type="button">Fit first + last</button>
+        <button id="trendFlatter" type="button">Flatter trend</button>
+        <button id="trendSteeper" type="button">Steeper trend</button>
+        <button id="trendReset" type="button">Reset trend fit</button>
+      </div>
+      <div class="hint">Keep only the fit mode, slope, and offset here. The other normalization settings are internal defaults now.</div>
+    </div>
+
+    <div style="display:none" aria-hidden="true">
+      <div class="section">
+        <h2>Internal normalization</h2>
+        <div class="row">
+          <div class="field">
+            <label>Use transform</label>
+            <select id="priceMode">
+              <option value="log" selected>Log transform</option>
+              <option value="raw">No log transform</option>
+              <option value="return">Log returns</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Trend method</label>
+            <select id="trendMethod">
+              <option value="linear" selected>Linear trend</option>
+              <option value="ema">EMA trend</option>
+              <option value="none">No detrend</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>EMA window</label>
+            <input id="emaWindow" type="number" min="2" max="500" step="1" value="80" />
+          </div>
+          <div class="field">
+            <label>Residual scale</label>
+            <select id="scaleMethod">
+              <option value="zscore" selected>Z-score residual</option>
+              <option value="demean">Demean only</option>
+              <option value="none">No scale</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Spectrum display</label>
+            <select id="display">
+              <option value="magnitude" selected>Magnitude</option>
+              <option value="power">Power</option>
+              <option value="logpower">Log power</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>FFT min bin</label>
+            <input id="fftMinBin" type="number" min="1" max="50000" step="1" value="1" />
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>FFT max bin</label>
+            <input id="fftMaxBin" type="number" min="1" max="50000" step="1" value="120" />
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="rerun" class="primary">Run normalize + FFT</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Top-N cycle projection</h2>
+      <div class="row">
+        <div class="field">
+          <label>Top peaks used</label>
+          <input id="topNPeaks" type="number" min="1" max="20" step="1" value="3" />
+        </div>
+        <div class="field">
+          <label>Projection horizon</label>
+          <input id="projectionHorizon" type="number" min="5" max="1000" step="1" value="120" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Show projection</label>
+          <select id="showProjection">
+            <option value="on" selected>On</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Rank peaks by</label>
+          <select id="projectionRank">
+            <option value="power" selected>Power</option>
+            <option value="magnitude">Magnitude</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint">Uses the strongest non-DC FFT bins to extend a historical residual cycle forward. This is a cycle-continuation scenario, not a forecast.</div>
+    </div>
+
+    <div class="section">
+      <h2>Date range</h2>
+      <div class="row">
+        <div class="field">
+          <label>Start date</label>
+          <input id="startDate" type="text" placeholder="YYYY-MM-DD" />
+        </div>
+        <div class="field">
+          <label>End date</label>
+          <input id="endDate" type="text" placeholder="YYYY-MM-DD" />
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="setRange" type="button" class="primary">Set date range</button>
+        <button id="clearRange" type="button">Clear date range</button>
+      </div>
+      <div class="hint" style="margin-top:8px">Set date range uses the visible start/end values and redraws. Clear date range removes both dates and returns to the full dataset. If only end is set, the last Window points up to that date are analyzed.</div>
+    </div>
+
+    <div class="section">
+      <h2>What this does</h2>
+      <div class="note">FFT runs on the normalized residual after optional log transform, manual trend adjustment, and detrending. The top chart always converts the trend and cycle-continuation scenario back to raw price units for display.</div>
+    </div>
+
+    <div class="section">
+      <h2>Trend debug</h2>
+      <div id="trendDebug" class="peak-note mono">Load data to inspect trend parameters.</div>
+    </div>
+  </aside>
+
+  <main class="right">
+    <section class="card chart-card">
+      <div class="chart-title">
+        <div>
+          <h2>Raw price + projected cycle scenario</h2>
+          <p>Raw price with fitted trend, hover values, projected low marker, and forward top-cycle continuation scenario.</p>
+        </div>
+        <p id="priceMeta"></p>
+      </div>
+      <canvas id="priceChart"></canvas>
+    </section>
+    <section class="card chart-card">
+      <div class="chart-title">
+        <div>
+          <h2>Transformed signal + trend fit</h2>
+          <p>Log/raw transformed signal with the fitted/manual trend. This is the step before residual normalization and FFT.</p>
+        </div>
+        <p id="fftInputMeta"></p>
+      </div>
+      <canvas id="fftInputChart"></canvas>
+    </section>
+    <section class="card chart-card">
+      <div class="chart-title">
+        <div>
+          <h2>Top-N cycle projection</h2>
+          <p>Normalized residual cycle fit and continuation scenario.</p>
+        </div>
+        <p id="projectionMeta"></p>
+      </div>
+      <canvas id="projectionChart"></canvas>
+      <div id="projectionSummary" class="peak-note">Load data to see top-N cycle projection.</div>
+    </section>
+    <section class="card chart-card">
+      <div class="chart-title">
+        <div>
+          <h2>Exact DFT spectrum</h2>
+          <p>DFT of normalized residual. Bin = cycles across the selected window.</p>
+        </div>
+        <p id="spectrumMeta"></p>
+      </div>
+      <canvas id="spectrumChart"></canvas>
+    </section>
+    <section class="card">
+      <h2>Metrics</h2>
+      <div class="metrics" id="metrics"></div>
+    </section>
+    <section class="card">
+      <h2>FFT peak table</h2>
+      <div id="peakTableWrap"></div>
+      <div id="selectedPeakWrap" class="selected-peak">Click spectrum bars or peak-table rows to select/deselect frequency components.</div>
+      <div class="button-row"><button id="clearSelectedPeak" type="button">Clear selected peak</button></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const API_BASE = 'http://localhost:8765';
+
+let rawRows = [];
+let analysisRows = [];
+let rangeState = { active: false, start: '', end: '' };
+let currentName = 'No data loaded';
+let selectedBin = null;
+let selectedBins = [];
+let lastState = null;
+let priceHoverIndex = null;
+
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
+
+function normalizeHistoryRows(rows) {
+  return sortRows((rows || []).map(row => {
+    const close = num(row.close);
+    const adjClose = num(row.adjClose);
+    const price = adjClose ?? close ?? num(row.open);
+    const date = String(row.date || '').trim();
+    return {
+      date,
+      dateKey: toDateKey(date),
+      open: num(row.open),
+      high: num(row.high),
+      low: num(row.low),
+      close,
+      adjClose,
+      volume: int(row.volume),
+      price
+    };
+  }).filter(row => row.date && Number.isFinite(row.price)));
+}
+
+function sortRows(rows) {
+  return rows.slice().sort((a, b) => {
+    const da = String(a.dateKey || a.date || '');
+    const db = String(b.dateKey || b.date || '');
+    if (da && db) return da.localeCompare(db);
+    return String(a.date || '').localeCompare(String(b.date || ''));
+  });
+}
+
+function num(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function int(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
+function parseDateTime(value, endOfDay = false) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  const hasTime = /[t ]\d{2}:\d{2}/i.test(v);
+  const candidate = hasTime ? v : `${v}${endOfDay ? 'T23:59:59' : 'T00:00:00'}`;
+  const t = new Date(candidate).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function toDateKey(value) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  const direct = /^\d{4}-\d{2}-\d{2}$/.exec(v);
+  if (direct) return direct[0];
+  if (v.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const t = new Date(v).getTime();
+  if (Number.isNaN(t)) return '';
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+function isDateKey(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim());
+}
+
+function formatDateLabel(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  // Avoid JavaScript turning arbitrary numbers/indexes into fake calendar dates.
+  // Only format real YYYY-MM-DD date keys. Everything else is shown as-is.
+  if (!isDateKey(raw)) return raw;
+  const d = new Date(raw + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return raw;
+  return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+}
+
+function normalizeDateKeyLabel(value) {
+  const key = toDateKey(value);
+  return isDateKey(key) ? key : '';
+}
+
+function formatProjectionDateLabel(value, allLabels) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('+')) return raw;
+  if (!isDateKey(raw)) return raw;
+  const d = new Date(raw + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return raw;
+
+  const valid = (allLabels || []).filter(isDateKey);
+  let spanDays = 0;
+  if (valid.length >= 2) {
+    const first = new Date(valid[0] + 'T00:00:00').getTime();
+    const last = new Date(valid[valid.length - 1] + 'T00:00:00').getTime();
+    spanDays = Math.max(0, (last - first) / 86400000);
+  }
+
+  // Projection charts can span decades. Full month/day labels look like broken random dates.
+  // Use cleaner year-level labels for long histories.
+  if (spanDays > 365 * 8) return String(d.getFullYear());
+  if (spanDays > 365 * 2) return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short' });
+  return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short', day: 'numeric' });
+}
+
+function mean(values) {
+  return values.reduce((sum, value) => sum + value, 0) / (values.length || 1);
+}
+
+function std(values) {
+  const m = mean(values);
+  return Math.sqrt(mean(values.map(value => (value - m) * (value - m)))) || 1;
+}
+
+function ema(values, windowSize) {
+  if (!values.length) return [];
+  const alpha = 2 / (windowSize + 1);
+  const out = [values[0]];
+  for (let i = 1; i < values.length; i++) {
+    out[i] = alpha * values[i] + (1 - alpha) * out[i - 1];
+  }
+  return out;
+}
+
+function dateAxisFromLabels(labels) {
+  const allValid = (labels || []).length > 0 && labels.every(isDateKey);
+  if (!allValid) return (labels || []).map((_, i) => i);
+  const first = new Date(labels[0] + 'T00:00:00').getTime();
+  return labels.map((label, i) => {
+    const t = new Date(label + 'T00:00:00').getTime();
+    return Number.isFinite(t) ? (t - first) / 86400000 : i;
+  });
+}
+
+function linearTrendFit(values, xs) {
+  const n = values.length;
+  const x = (xs && xs.length === n) ? xs : values.map((_, i) => i);
+  const mx = mean(x);
+  const my = mean(values);
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (x[i] - mx) * (values[i] - my);
+    den += (x[i] - mx) * (x[i] - mx);
+  }
+  const slope = den ? num / den : 0;
+  const intercept = my - slope * mx;
+  return { trend: x.map(v => intercept + slope * v), slope, intercept, xs: x };
+}
+
+function endpointTrendFit(values, xs) {
+  const n = values.length;
+  const x = (xs && xs.length === n) ? xs : values.map((_, i) => i);
+  if (n < 2) {
+    const v = values[0] || 0;
+    return { trend: values.map(() => v), slope: 0, intercept: v, xs: x };
+  }
+  const x0 = x[0];
+  const x1 = x[n - 1];
+  const y0 = values[0];
+  const y1 = values[n - 1];
+  const slope = (y1 - y0) / ((x1 - x0) || (n - 1) || 1);
+  const intercept = y0 - slope * x0;
+  return { trend: x.map(v => intercept + slope * v), slope, intercept, xs: x };
+}
+
+function trendFitMode() {
+  const el = $('trendFitMode');
+  return el ? el.value : 'leastSquares';
+}
+
+function linearTrend(values) {
+  return linearTrendFit(values, values.map((_, i) => i)).trend;
+}
+
+function manualTrendSlopeMultiplier() {
+  const el = $('trendSlopeMultiplier');
+  if (!el) return 1;
+  const value = Number(el.value);
+  return Number.isFinite(value) ? value : 1;
+}
+
+function manualTrendOffset() {
+  const el = $('trendOffset');
+  if (!el) return 0;
+  const value = Number(el.value);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function buildLinearTrendModel(values, fitMode) {
+  const xs = values.map((_, i) => i);
+  const baseFit = fitMode === 'leastSquares'
+    ? linearTrendFit(values, xs)
+    : endpointTrendFit(values, xs);
+  const slopeMultiplier = manualTrendSlopeMultiplier();
+  const trendOffset = manualTrendOffset();
+  const trendIntercept = baseFit.intercept;
+  const trendSlope = baseFit.slope * slopeMultiplier;
+  const trend = xs.map(x => trendIntercept + trendSlope * x + trendOffset);
+  return {
+    trend,
+    trendXs: xs,
+    kind: 'linear',
+    fitMode,
+    trendIntercept,
+    trendSlope,
+    trendOffset,
+    trendSlopeMultiplier: slopeMultiplier,
+    baseSlope: baseFit.slope,
+    baseIntercept: baseFit.intercept
+  };
+}
+
+function trendValueAt(state, index) {
+  if (!state) return NaN;
+  if (state.trendParams && state.trendParams.kind === 'linear') {
+    const p = state.trendParams;
+    return p.trendIntercept + p.trendSlope * index + p.trendOffset;
+  }
+  if (state.trend && Number.isFinite(state.trend[index])) return state.trend[index];
+  if (state.trend && state.trend.length) return state.trend[state.trend.length - 1];
+  return NaN;
+}
+
+function dft(signal) {
+  const N = signal.length;
+  const re = new Array(N).fill(0);
+  const im = new Array(N).fill(0);
+  for (let k = 0; k < N; k++) {
+    let sr = 0;
+    let si = 0;
+    for (let n = 0; n < N; n++) {
+      const angle = -2 * Math.PI * k * n / N;
+      sr += signal[n] * Math.cos(angle);
+      si += signal[n] * Math.sin(angle);
+    }
+    re[k] = sr;
+    im[k] = si;
+  }
+  return { re, im };
+}
+
+function spectrum(signal, mode) {
+  const N = signal.length;
+  const { re, im } = dft(signal);
+  const bins = [];
+  for (let k = 0; k <= Math.floor(N / 2); k++) {
+    const raw = Math.hypot(re[k], im[k]);
+    const mag = (k === 0 || (N % 2 === 0 && k === N / 2)) ? raw / N : 2 * raw / N;
+    const power = mag * mag;
+    const value = mode === 'power' ? power : mode === 'logpower' ? Math.log10(1 + power) : mag;
+    bins.push({ bin: k, norm: k / (N / 2), mag, power, value });
+  }
+  return { bins, re, im, N };
+}
+
+function dataDateRange() {
+  const keys = rawRows.map(row => row.dateKey || toDateKey(row.date)).filter(Boolean).sort();
+  if (!keys.length) return null;
+  return { min: keys[0], max: keys[keys.length - 1] };
+}
+
+function setDateInputBounds() {
+  // Text date fields are used instead of browser date inputs so values are never silently rejected.
+  const range = dataDateRange();
+  if (!range) return;
+  $('startDate').placeholder = `YYYY-MM-DD  (${range.min}..${range.max})`;
+  $('endDate').placeholder = `YYYY-MM-DD  (${range.min}..${range.max})`;
+}
+
+
+function selectedRows() {
+  if (!rawRows.length) return [];
+
+  const win = Math.max(16, Number($('windowPoints').value) || 756);
+  let start = rangeState.active ? String(rangeState.start || '').trim() : '';
+  let end = rangeState.active ? String(rangeState.end || '').trim() : '';
+
+  if (start && end && start > end) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+  }
+
+  // No active date filter means full dataset. This avoids hidden stale analysisRows.
+  if (!start && !end) return rawRows.slice();
+
+  const rowsWithKeys = rawRows
+    .map(row => ({ row, key: row.dateKey || toDateKey(row.date) }))
+    .filter(x => x.key);
+
+  let rows = rowsWithKeys
+    .filter(x => (!start || x.key >= start) && (!end || x.key <= end))
+    .map(x => x.row);
+
+  // End-only means rolling window ending at/before the end date.
+  if (!start && end) rows = rows.slice(-win);
+
+  return rows;
+}
+
+function normalizeDateInput(value) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  const key = toDateKey(v);
+  return key || v;
+}
+
+function readDateInputs() {
+  let start = normalizeDateInput($('startDate').value);
+  let end = normalizeDateInput($('endDate').value);
+
+  if (start && end && start > end) {
+    const tmp = start;
+    start = end;
+    end = tmp;
+  }
+
+  $('startDate').value = start;
+  $('endDate').value = end;
+  return { start, end };
+}
+
+function filterRowsByDateInputs() {
+  const previous = { ...rangeState };
+  const { start, end } = readDateInputs();
+  rangeState = { active: Boolean(start || end), start, end };
+  const rows = selectedRows();
+  rangeState = previous;
+  return rows;
+}
+
+function dateRangeLabel(rows) {
+  if (!rows || !rows.length) return '';
+  const a = rows[0]?.dateKey || rows[0]?.date;
+  const b = rows[rows.length - 1]?.dateKey || rows[rows.length - 1]?.date;
+  if (!a || !b) return '';
+  return `${formatDateLabel(a)} – ${formatDateLabel(b)}`;
+}
+
+function priceSeries(rows) {
+  const prices = rows.map(row => row.price);
+  const dates = rows.map(row => row.dateKey || row.date);
+  const mode = $('priceMode').value;
+  let base;
+  if (mode === 'raw') {
+    base = prices.slice();
+  } else if (mode === 'return') {
+    const logs = prices.map(Math.log);
+    base = logs.slice(1).map((value, i) => value - logs[i]);
+    dates.shift();
+  } else {
+    base = prices.map(Math.log);
+  }
+  return { base, dates, mode };
+}
+
+function compute() {
+  if (!rawRows.length) return null;
+
+  const rows = selectedRows();
+  const { base, dates, mode } = priceSeries(rows);
+  const trendMethod = $('trendMethod').value;
+  let trend;
+  let trendParams = null;
+  if (trendMethod === 'linear') {
+    trendParams = buildLinearTrendModel(base, trendFitMode());
+    trend = trendParams.trend;
+  } else if (trendMethod === 'ema') {
+    trend = ema(base, Math.max(2, Number($('emaWindow').value) || 80));
+  } else {
+    trend = new Array(base.length).fill(0);
+  }
+
+  let residual = base.map((value, i) => value - trend[i]);
+  if (trendMethod === 'none') {
+    residual = base.map(value => value - mean(base));
+  }
+
+  const scale = $('scaleMethod').value;
+  const rawResidualStd = std(residual);
+  let normalized = residual.slice();
+  const m = mean(normalized);
+  if (scale === 'zscore') {
+    const s = rawResidualStd || 1;
+    normalized = normalized.map(value => (value - m) / s);
+  } else if (scale === 'demean') {
+    normalized = normalized.map(value => value - m);
+  }
+
+  const spec = spectrum(normalized, $('display').value);
+  return {
+    rows,
+    dates,
+    prices: rows.map(row => row.price),
+    base,
+    trend,
+    trendParams,
+    residual: normalized,
+    bins: spec.bins,
+    re: spec.re,
+    im: spec.im,
+    N: spec.N,
+    mode,
+    trendMethod,
+    scale,
+    rawResidualMean: m,
+    rawResidualStd,
+    priceMean: mean(rows.map(row => row.price)),
+    trendSlopeMultiplier: trendParams ? trendParams.trendSlopeMultiplier : manualTrendSlopeMultiplier(),
+    trendOffset: trendParams ? trendParams.trendOffset : manualTrendOffset(),
+    trendFitMode: trendParams ? trendParams.fitMode : trendFitMode()
+  };
+}
+
+function resize(canvas) {
+  const dpr = devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.floor(rect.width * dpr);
+  canvas.height = Math.floor(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function drawGrid(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,.07)';
+  ctx.lineWidth = 1;
+  const l = 44, t = 16, b = h - 28, r = w - 14;
+  for (let i = 0; i <= 4; i++) {
+    const y = t + (b - t) * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(l, y);
+    ctx.lineTo(r, y);
+    ctx.stroke();
+  }
+  for (let i = 0; i <= 6; i++) {
+    const x = l + (r - l) * i / 6;
+    ctx.beginPath();
+    ctx.moveTo(x, t);
+    ctx.lineTo(x, b);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,.18)';
+  ctx.beginPath();
+  ctx.moveTo(l, t);
+  ctx.lineTo(l, b);
+  ctx.lineTo(r, b);
+  ctx.stroke();
+}
+
+function drawEmpty(canvas, message) {
+  const { ctx, w, h } = resize(canvas);
+  drawGrid(ctx, w, h);
+  ctx.fillStyle = 'rgba(231,243,247,.82)';
+  ctx.font = '13px ui-monospace,monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(message, w / 2, h / 2);
+  ctx.textAlign = 'left';
+}
+
+function pickDateTicks(labels, count = 6, formatter = formatDateLabel) {
+  if (!labels || !labels.length) return [];
+  const out = [];
+  const n = labels.length;
+  for (let i = 0; i < count; i++) {
+    const idx = Math.round(i * (n - 1) / Math.max(1, count - 1));
+    out.push({ idx, label: formatter(labels[idx], labels) });
+  }
+  return out;
+}
+
+function plot(canvas, series, labels, options = {}) {
+  const { ctx, w, h } = resize(canvas);
+  drawGrid(ctx, w, h);
+  const all = series.flatMap(item => item.values).filter(Number.isFinite);
+  if (!all.length) return;
+
+  let mn = Math.min(...all);
+  let mx = Math.max(...all);
+  if (mx === mn) {
+    mx += 1;
+    mn -= 1;
+  }
+
+  const l = 44, t = 16, b = h - 34, r = w - 14;
+  const xs = (i, n) => l + (r - l) * i / Math.max(1, n - 1);
+  const ys = value => t + (b - t) - (value - mn) / (mx - mn) * (b - t);
+
+  for (const item of series) {
+    ctx.strokeStyle = item.color;
+    ctx.lineWidth = item.width || 2;
+    ctx.globalAlpha = item.alpha ?? 1;
+    ctx.setLineDash(item.dash || []);
+    ctx.beginPath();
+    let drawing = false;
+    item.values.forEach((value, i) => {
+      if (!Number.isFinite(value)) { drawing = false; return; }
+      const x = xs(i, item.values.length);
+      const y = ys(value);
+      if (!drawing) { ctx.moveTo(x, y); drawing = true; }
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 1;
+
+  if (options.boundaryIndex !== undefined && options.boundaryIndex !== null) {
+    const bx = xs(options.boundaryIndex, labels?.length || series[0].values.length);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(242,191,104,.55)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(bx, t);
+    ctx.lineTo(bx, b);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(242,191,104,.9)';
+    ctx.font = '11px ui-monospace,monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(options.boundaryLabel || 'last real data', bx - 6, t + 13);
+    ctx.restore();
+  }
+
+  if (options.markers && options.markers.length) {
+    ctx.save();
+    for (const marker of options.markers) {
+      if (!Number.isFinite(marker.idx) || !Number.isFinite(marker.value)) continue;
+      const totalLen = labels?.length || series[0].values.length;
+      const x = xs(marker.idx, totalLen);
+      const y = ys(marker.value);
+      ctx.fillStyle = marker.color || 'rgba(98,226,209,.98)';
+      ctx.strokeStyle = 'rgba(0,0,0,.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, marker.radius || 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (marker.label) {
+        ctx.font = '12px ui-monospace,monospace';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = marker.color || 'rgba(98,226,209,.98)';
+        const labelX = Math.min(x + 8, w - 210);
+        const labelY = Math.max(t + 14, y - 10);
+        ctx.fillText(marker.label, labelX, labelY);
+      }
+    }
+    ctx.restore();
+  }
+
+  if (Number.isFinite(options.hoverIndex)) {
+    const totalLen = labels?.length || series[0].values.length;
+    const idx = Math.max(0, Math.min(totalLen - 1, Math.round(options.hoverIndex)));
+    const x = xs(idx, totalLen);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(231,243,247,.45)';
+    ctx.setLineDash([3, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, t);
+    ctx.lineTo(x, b);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    for (const item of series) {
+      const value = item.values[idx];
+      if (!Number.isFinite(value)) continue;
+      ctx.fillStyle = item.color;
+      ctx.beginPath();
+      ctx.arc(x, ys(value), 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const lines = typeof options.hoverLines === 'function' ? options.hoverLines(idx) : [];
+    if (lines && lines.length) {
+      ctx.font = '12px ui-monospace,monospace';
+      const padding = 8;
+      const lineH = 16;
+      const boxW = Math.min(360, Math.max(...lines.map(line => ctx.measureText(String(line)).width)) + padding * 2);
+      const boxH = lines.length * lineH + padding * 2;
+      let boxX = x + 12;
+      if (boxX + boxW > w - 8) boxX = x - boxW - 12;
+      boxX = Math.max(8, boxX);
+      const boxY = t + 8;
+      ctx.fillStyle = 'rgba(3,10,15,.92)';
+      ctx.strokeStyle = 'rgba(98,226,209,.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxW, boxH, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(231,243,247,.96)';
+      ctx.textAlign = 'left';
+      lines.forEach((line, i) => ctx.fillText(String(line), boxX + padding, boxY + padding + lineH * (i + .75)));
+    }
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(231,243,247,.9)';
+  ctx.font = '12px ui-monospace,monospace';
+  ctx.fillText(mx.toFixed(3), 8, 26);
+  ctx.fillText(mn.toFixed(3), 8, h - 38);
+  ctx.textAlign = 'center';
+  if (options.customTicks && options.customTicks.length) {
+    const totalLen = labels?.length || series[0].values.length;
+    for (const tick of options.customTicks) {
+      if (!Number.isFinite(tick.idx)) continue;
+      const safeIdx = Math.max(0, Math.min(totalLen - 1, tick.idx));
+      ctx.fillText(tick.label, xs(safeIdx, totalLen), h - 10);
+    }
+  } else if (labels && labels.length) {
+    for (const tick of pickDateTicks(labels, options.tickCount || 6, options.labelFormatter || formatDateLabel)) {
+      ctx.fillText(tick.label, xs(tick.idx, labels.length), h - 10);
+    }
+  } else {
+    ctx.fillText('0', l, h - 10);
+    ctx.fillText(String(series[0].values.length - 1), r, h - 10);
+  }
+  ctx.textAlign = 'left';
+}
+
+function fftZoomRange(bins) {
+  const maxAvailable = Math.max(1, bins.length - 1);
+  let minBin = Math.max(1, Math.floor(Number($('fftMinBin')?.value) || 1));
+  let maxBin = Math.floor(Number($('fftMaxBin')?.value) || Math.min(120, maxAvailable));
+  minBin = Math.min(minBin, maxAvailable);
+  maxBin = Math.max(1, Math.min(maxBin, maxAvailable));
+  if (minBin > maxBin) {
+    const tmp = minBin;
+    minBin = maxBin;
+    maxBin = tmp;
+  }
+  if ($('fftMinBin')) $('fftMinBin').value = String(minBin);
+  if ($('fftMaxBin')) $('fftMaxBin').value = String(maxBin);
+  return { minBin, maxBin };
+}
+function selectedBinInfo(state, binNumber) {
+  if (!state || binNumber === null || binNumber === undefined) return null;
+  const bin = state.bins.find(item => item.bin === Number(binNumber));
+  if (!bin || bin.bin < 0) return null;
+  const totalPower = state.bins.slice(1).reduce((sum, item) => sum + item.power, 0) || 1;
+  const medianPower = median(state.bins.slice(1).map(item => item.power).filter(value => value > 0)) || 1e-12;
+  const period = bin.bin ? state.residual.length / bin.bin : Infinity;
+  const powerPct = bin.bin ? bin.power / totalPower * 100 : 0;
+  const p2m = bin.bin ? bin.power / medianPower : 0;
+  let oneWayPct = null;
+  let peakToTroughPct = null;
+  if (state.mode === 'log') {
+    const logAmp = state.scale === 'zscore' ? bin.mag * state.rawResidualStd : bin.mag;
+    oneWayPct = (Math.exp(logAmp) - 1) * 100;
+    peakToTroughPct = (Math.exp(2 * logAmp) - 1) * 100;
+  }
+  return { bin: bin.bin, period, mag: bin.mag, powerPct, p2m, oneWayPct, peakToTroughPct };
+}
+
+
+function isBinSelected(binNumber) {
+  return selectedBins.includes(Number(binNumber));
+}
+
+function activeSelectedBins(state) {
+  if (!state) return [];
+  const maxBin = Math.floor(state.residual.length / 2);
+  return selectedBins
+    .map(Number)
+    .filter(bin => Number.isFinite(bin) && bin >= 1 && bin <= maxBin)
+    .filter((bin, index, arr) => arr.indexOf(bin) === index)
+    .sort((a, b) => a - b);
+}
+
+function toggleSelectedBin(binNumber) {
+  const bin = Number(binNumber);
+  if (!Number.isFinite(bin) || bin < 1) return;
+  if (isBinSelected(bin)) {
+    selectedBins = selectedBins.filter(item => item !== bin);
+    selectedBin = selectedBins.length ? selectedBins[selectedBins.length - 1] : null;
+  } else {
+    selectedBins = selectedBins.concat([bin]);
+    selectedBin = bin;
+  }
+  render();
+}
+
+function clearSelectedBins() {
+  selectedBins = [];
+  selectedBin = null;
+  render();
+}
+
+function reconstructBinsComponent(state, bins) {
+  if (!state || !bins || !bins.length) return null;
+  const N = state.residual.length;
+  const out = new Array(N).fill(0);
+  for (const bin of bins) {
+    const component = reconstructBinComponent(state, bin);
+    if (!component) continue;
+    for (let i = 0; i < N; i++) out[i] += component[i];
+  }
+  return out;
+}
+
+function reconstructBinComponent(state, binNumber) {
+  if (!state || !state.re || !state.im) return null;
+  const N = state.residual.length;
+  const k = Number(binNumber);
+  if (!Number.isFinite(k) || k < 0 || k > Math.floor(N / 2)) return null;
+  return reconstructBinExtended(state, k, N);
+}
+
+function reconstructBinExtended(state, binNumber, length) {
+  if (!state || !state.re || !state.im) return null;
+  const N = state.residual.length;
+  const k = Number(binNumber);
+  if (!Number.isFinite(k) || k < 0 || k > Math.floor(N / 2)) return null;
+  const out = new Array(length);
+  if (k === 0) {
+    const v = state.re[0] / N;
+    return out.fill(v);
+  }
+  if (N % 2 === 0 && k === N / 2) {
+    for (let n = 0; n < length; n++) out[n] = (state.re[k] / N) * Math.cos(Math.PI * n);
+    return out;
+  }
+  for (let n = 0; n < length; n++) {
+    const angle = 2 * Math.PI * k * n / N;
+    out[n] = (2 / N) * (state.re[k] * Math.cos(angle) - state.im[k] * Math.sin(angle));
+  }
+  return out;
+}
+
+function topProjectionBins(state, count) {
+  if (!state || !state.bins) return [];
+  const manualBins = activeSelectedBins(state);
+  if (manualBins.length) return manualBins;
+  const rank = $('projectionRank')?.value || 'power';
+  return state.bins.slice(1)
+    .sort((a, b) => (rank === 'magnitude' ? b.mag - a.mag : b.power - a.power))
+    .slice(0, Math.max(1, Math.min(20, count)))
+    .map(bin => bin.bin);
+}
+
+function buildTopNProjection(state) {
+  if (!state || !state.re || !state.im || !$('topNPeaks')) return null;
+  if (($('showProjection')?.value || 'on') === 'off') return null;
+  const N = state.residual.length;
+  const topN = Math.max(1, Math.min(20, Math.floor(Number($('topNPeaks').value) || 3)));
+  const horizon = Math.max(1, Math.min(1000, Math.floor(Number($('projectionHorizon').value) || 120)));
+  $('topNPeaks').value = String(topN);
+  $('projectionHorizon').value = String(horizon);
+  const manual = activeSelectedBins(state).length > 0;
+  const bins = topProjectionBins(state, topN);
+  const length = N + horizon;
+  const projected = new Array(length).fill(0);
+  for (const bin of bins) {
+    const component = reconstructBinExtended(state, bin, length);
+    if (!component) continue;
+    for (let i = 0; i < length; i++) projected[i] += component[i];
+  }
+  const actualPadded = state.residual.concat(new Array(horizon).fill(NaN));
+  const historicalFit = projected.slice(0, N).concat(new Array(horizon).fill(NaN));
+  const futureProjection = new Array(N).fill(NaN).concat(projected.slice(N));
+  return { bins, topN: manual ? bins.length : topN, manual, horizon, projected, actualPadded, historicalFit, futureProjection };
+}
+
+function addTradingDaysFrom(dateKey, count) {
+  const out = [];
+  const key = normalizeDateKeyLabel(dateKey);
+  let d = key ? new Date(key + 'T00:00:00') : new Date(NaN);
+  if (Number.isNaN(d.getTime())) return out;
+  while (out.length < count) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+function buildProjectionLabels(state, horizon) {
+  const historical = (state?.dates || []).map(normalizeDateKeyLabel);
+  const allHistoricalValid = historical.length > 0 && historical.every(isDateKey);
+  const N = state?.residual?.length || historical.length || 0;
+
+  if (!allHistoricalValid) {
+    // Fallback: label by relative samples, never parse numeric labels as dates.
+    return Array.from({ length: N + horizon }, (_, i) => i < N ? String(i) : `+${i - N + 1}d`);
+  }
+
+  const lastDate = historical[N - 1];
+  const future = addTradingDaysFrom(lastDate, horizon);
+  // Labels are now real historical dates plus real future trading-day dates.
+  // The chart uses custom ticks so it does not spam repeated future years.
+  return historical.concat(future);
+}
+
+function buildProjectionTicks(state, horizon) {
+  const historical = (state?.dates || []).map(normalizeDateKeyLabel);
+  const N = state?.residual?.length || historical.length || 0;
+  const total = N + horizon;
+  if (!N || total <= 1) return [];
+
+  const allHistoricalValid = historical.length === N && historical.every(isDateKey);
+  if (!allHistoricalValid) {
+    return [
+      { idx: 0, label: '0' },
+      { idx: Math.max(0, N - 1), label: String(Math.max(0, N - 1)) },
+      { idx: total - 1, label: String(total - 1) }
+    ];
+  }
+
+  const startLabel = formatProjectionDateLabel(historical[0], historical);
+  const midIdx = Math.round((N - 1) / 2);
+  const midLabel = formatProjectionDateLabel(historical[midIdx], historical);
+  const endHistoricalLabel = formatProjectionDateLabel(historical[N - 1], historical);
+
+  const futureDates = addTradingDaysFrom(historical[N - 1], horizon);
+  const projectionEnd = futureDates[futureDates.length - 1];
+  const projectionEndLabel = projectionEnd ? formatProjectionDateLabel(projectionEnd, futureDates) : `+${horizon}d`;
+
+  // Keep the projection axis deliberately simple:
+  // real start date, one real middle date, real data end date, projected end date.
+  // No intermediate +d labels and no repeated future-year ticks.
+  return [
+    { idx: 0, label: startLabel },
+    { idx: midIdx, label: midLabel },
+    { idx: N - 1, label: endHistoricalLabel },
+    { idx: total - 1, label: projectionEndLabel }
+  ];
+}
+
+function correlation(a, b) {
+  const pairs = [];
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (Number.isFinite(a[i]) && Number.isFinite(b[i])) pairs.push([a[i], b[i]]);
+  }
+  if (pairs.length < 2) return 0;
+  const xs = pairs.map(p => p[0]);
+  const ys = pairs.map(p => p[1]);
+  const mx = mean(xs), my = mean(ys);
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < pairs.length; i++) {
+    const x = xs[i] - mx, y = ys[i] - my;
+    num += x * y; dx += x * x; dy += y * y;
+  }
+  return dx && dy ? num / Math.sqrt(dx * dy) : 0;
+}
+
+function futureDirection(values, start, horizon = 20) {
+  const end = Math.min(values.length - 1, start + Math.max(1, horizon));
+  if (!Number.isFinite(values[start]) || !Number.isFinite(values[end])) return '—';
+  const delta = values[end] - values[start];
+  if (Math.abs(delta) < 0.05) return 'flat';
+  return delta > 0 ? 'up' : 'down';
+}
+
+function updateProjectionSummary(state, projection) {
+  const wrap = $('projectionSummary');
+  if (!wrap) return;
+  if (!state || !projection) {
+    wrap.textContent = 'Projection off or no data loaded.';
+    if ($('projectionMeta')) $('projectionMeta').textContent = '';
+    return;
+  }
+  const N = state.residual.length;
+  const periods = projection.bins.map(bin => `${bin} (${(N / bin).toFixed(N / bin >= 100 ? 0 : 1)}d)`).join(', ');
+  const fit = projection.projected.slice(0, N);
+  const r = correlation(state.residual, fit);
+  const r2 = r * r;
+  const dir = futureDirection(projection.projected, N - 1, 20);
+  const future = projection.projected.slice(N);
+  const cur = projection.projected[N - 1];
+  const maxDelta = Math.max(...future.map(v => v - cur));
+  const minDelta = Math.min(...future.map(v => v - cur));
+  if ($('projectionMeta')) $('projectionMeta').textContent = `${projection.manual ? 'Selected' : 'Top'} ${projection.topN} peaks · ${projection.horizon}d scenario`;
+  wrap.innerHTML = `${projection.manual ? 'Selected bins' : 'Bins used'}: <b>${periods}</b> · historical fit R²: <b>${r2.toFixed(3)}</b> · first 20d direction: <b>${dir}</b> · projected residual range: <b>${minDelta.toFixed(2)} to +${maxDelta.toFixed(2)}σ</b>. Cycle continuation scenario, not a forecast.`;
+}
+
+
+function trendExtended(state, length, labels = null) {
+  const N = state?.trend?.length || 0;
+  if (!N) return new Array(length).fill(0);
+  if (state.trendParams && state.trendParams.kind === 'linear') {
+    const out = new Array(length);
+    for (let i = 0; i < length; i++) {
+      out[i] = trendValueAt(state, i);
+    }
+    return out;
+  }
+  const out = new Array(length).fill(0);
+  const last = state.trend[N - 1];
+  for (let i = 0; i < length; i++) out[i] = i < N ? state.trend[i] : last;
+  return out;
+}
+
+function projectedResidualToSignalUnits(state, projectedResidual) {
+  if (!Number.isFinite(projectedResidual)) return NaN;
+  const residualMean = state.rawResidualMean || 0;
+  if (state.scale === 'zscore') {
+    return projectedResidual * (state.rawResidualStd || 1) + residualMean;
+  }
+  if (state.scale === 'demean') {
+    return projectedResidual + residualMean;
+  }
+  return projectedResidual;
+}
+
+function priceFromBaseValue(state, baseValue) {
+  if (!Number.isFinite(baseValue)) return NaN;
+  if (state.mode === 'log') return Math.exp(baseValue);
+  if (state.mode === 'raw') return baseValue;
+  return NaN;
+}
+
+function formatSignalValue(state, value) {
+  if (!Number.isFinite(value)) return '—';
+  if (state.mode === 'log') {
+    const dollars = priceFromBaseValue(state, value);
+    return `${value.toFixed(4)} log${Number.isFinite(dollars) ? ` ($${dollars.toFixed(2)})` : ''}`;
+  }
+  if (state.mode === 'raw') return `$${value.toFixed(2)}`;
+  return value.toFixed(5);
+}
+
+function formatRawPriceValue(value) {
+  if (!Number.isFinite(value)) return '—';
+  if (Math.abs(value) >= 1000) return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  if (Math.abs(value) >= 1) return `$${value.toFixed(2)}`;
+  return `$${value.toPrecision(4)}`;
+}
+
+function buildPriceProjectionSeries(state, projection) {
+  if (!state || !projection) return null;
+  if (state.mode === 'return') return null;
+
+  const N = state.residual.length;
+  const length = N + projection.horizon;
+  const projectionLabels = buildProjectionLabels(state, projection.horizon);
+  const projectedTrend = trendExtended(state, length, projectionLabels);
+
+  // Raw-price display pipeline:
+  // raw price -> optional log signal -> trend/residual normalization -> FFT projection
+  // -> inverse normalization -> add projected trend -> inverse log transform -> raw price.
+  const actualRaw = state.prices.concat(new Array(projection.horizon).fill(NaN));
+  const trendRaw = projectedTrend.map(value => priceFromBaseValue(state, value));
+
+  const realResidual = projection.projected.map(value => projectedResidualToSignalUnits(state, value));
+  const projectedSignal = realResidual.map((value, i) => {
+    if (!Number.isFinite(value) || !Number.isFinite(projectedTrend[i])) return NaN;
+    return projectedTrend[i] + value;
+  });
+  const projectedRawPrice = projectedSignal.map(value => priceFromBaseValue(state, value));
+  const lastRaw = state.prices[N - 1];
+  const futureProjectedRaw = new Array(length).fill(NaN);
+  futureProjectedRaw[N - 1] = lastRaw;
+  for (let i = N; i < length; i++) {
+    futureProjectedRaw[i] = projectedRawPrice[i];
+  }
+
+  let buyMarker = null;
+  const futureValues = projectedRawPrice.slice(N)
+    .map((value, offset) => ({ value, idx: N + offset }))
+    .filter(item => Number.isFinite(item.value));
+  if (futureValues.length) {
+    const lowest = futureValues.reduce((best, item) => item.value < best.value ? item : best, futureValues[0]);
+    const pctFromCurrent = Number.isFinite(lastRaw) && lastRaw !== 0 ? (lowest.value / lastRaw - 1) * 100 : NaN;
+    buyMarker = {
+      idx: lowest.idx,
+      value: lowest.value,
+      color: 'rgba(98,226,209,.98)',
+      label: `Projected low: ${formatRawPriceValue(lowest.value)}${Number.isFinite(pctFromCurrent) ? ` (${pctFromCurrent.toFixed(1)}%)` : ''}`
+    };
+  }
+
+  return { actualRaw, trendRaw, projectedSignal, projectedRawPrice, futureProjectedRaw, buyMarker, lastRaw };
+}
+
+function plotPriceChartWithProjection(state, projection) {
+  const canvas = $('priceChart');
+  const labels = projection ? buildProjectionLabels(state, projection.horizon) : state.dates;
+  const ticks = projection ? buildProjectionTicks(state, projection.horizon) : null;
+  const priceProj = projection ? buildPriceProjectionSeries(state, projection) : null;
+  if (priceProj) {
+    const hoverLines = idx => {
+      const label = labels && labels[idx] ? formatProjectionDateLabel(labels[idx], labels) : String(idx);
+      const lines = [`Date: ${label}`];
+      const actual = priceProj.actualRaw[idx];
+      const trend = priceProj.trendRaw[idx];
+      const projected = priceProj.futureProjectedRaw[idx];
+      if (Number.isFinite(actual)) lines.push(`Actual raw price: ${formatRawPriceValue(actual)}`);
+      if (Number.isFinite(trend)) lines.push(`Trend raw price: ${formatRawPriceValue(trend)}`);
+      if (Number.isFinite(projected)) lines.push(`Projected raw price: ${formatRawPriceValue(projected)}`);
+      if (priceProj.buyMarker && idx === priceProj.buyMarker.idx) lines.push('Projected low / possible buy level');
+      return lines;
+    };
+    plot(canvas, [
+      { values: priceProj.actualRaw, color: '#e7f3f7', width: 2 },
+      { values: priceProj.trendRaw, color: '#f2bf68', width: 2, alpha: 0.85 },
+      { values: priceProj.futureProjectedRaw, color: '#ff6e85', width: 2.4, alpha: 0.98, dash: [6, 5] }
+    ], labels, Object.assign(ticks ? { customTicks: ticks } : {}, {
+      markers: priceProj.buyMarker ? [priceProj.buyMarker] : [],
+      hoverIndex: priceHoverIndex,
+      hoverLines
+    }));
+  } else {
+    const actualRaw = state.prices || [];
+    const trendRaw = (state.trend || []).map(value => priceFromBaseValue(state, value));
+    plot(canvas, [
+      { values: actualRaw, color: '#e7f3f7', width: 2 },
+      { values: trendRaw, color: '#f2bf68', width: 2, alpha: 0.85 }
+    ], state.dates, {
+      hoverIndex: priceHoverIndex,
+      hoverLines: idx => {
+        const label = state.dates && state.dates[idx] ? formatDateLabel(state.dates[idx]) : String(idx);
+        const lines = [`Date: ${label}`];
+        if (Number.isFinite(actualRaw[idx])) lines.push(`Actual raw price: ${formatRawPriceValue(actualRaw[idx])}`);
+        if (Number.isFinite(trendRaw[idx])) lines.push(`Trend raw price: ${formatRawPriceValue(trendRaw[idx])}`);
+        return lines;
+      }
+    });
+  }
+}
+
+function plotProjectionChart(state) {
+  const canvas = $('projectionChart');
+  if (!canvas) return;
+  if (!state) { drawEmpty(canvas, 'Load data to see top-N projection'); updateProjectionSummary(null, null); return; }
+  const projection = buildTopNProjection(state);
+  if (!projection) { drawEmpty(canvas, 'Projection is off'); updateProjectionSummary(state, null); return; }
+  const labels = buildProjectionLabels(state, projection.horizon);
+  const ticks = buildProjectionTicks(state, projection.horizon);
+  plot(canvas, [
+    { values: projection.actualPadded, color: '#62e2d1', width: 2, alpha: 0.95 },
+    { values: projection.historicalFit, color: '#f2bf68', width: 2, alpha: 0.9 },
+    { values: projection.futureProjection, color: '#ff6e85', width: 2, alpha: 0.95, dash: [6, 5] }
+  ], labels, { customTicks: ticks });
+  updateProjectionSummary(state, projection);
+}
+
+function plotBars(canvas, bins) {
+  const { ctx, w, h } = resize(canvas);
+  drawGrid(ctx, w, h);
+  const { minBin, maxBin } = fftZoomRange(bins);
+  const visible = bins.filter(bin => bin.bin >= minBin && bin.bin <= maxBin);
+  const vals = visible.map(bin => bin.value);
+  const max = Math.max(...vals, 1e-9);
+  const l = 44, t = 16, b = h - 28, r = w - 14;
+  const n = Math.max(1, maxBin - minBin + 1);
+  for (const bin of visible) {
+    const x = l + (r - l) * (bin.bin - minBin) / Math.max(1, n - 1);
+    const bw = Math.max(1, (r - l) / Math.max(1, n) * 0.8);
+    const bh = (bin.value / max) * (b - t);
+    const selected = isBinSelected(bin.bin);
+    ctx.fillStyle = selected ? 'rgba(242,191,104,.98)' : 'rgba(98,226,209,.95)';
+    ctx.fillRect(x, b - bh, bw, bh);
+    if (selected) {
+      ctx.strokeStyle = 'rgba(242,191,104,.95)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - 1, b - bh - 1, bw + 2, bh + 2);
+      const period = lastState && bin.bin ? lastState.residual.length / bin.bin : null;
+      ctx.fillStyle = 'rgba(242,191,104,.95)';
+      ctx.font = '12px ui-monospace,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`bin ${bin.bin}${period ? ' / ' + period.toFixed(period >= 100 ? 0 : 1) + 'd' : ''}`, x + bw / 2, Math.max(12, b - bh - 8));
+      ctx.textAlign = 'left';
+    }
+  }
+  ctx.fillStyle = 'rgba(231,243,247,.9)';
+  ctx.font = '12px ui-monospace,monospace';
+  ctx.fillText(max.toFixed(3), 8, 26);
+  ctx.fillText('0', 18, h - 31);
+  ctx.fillText(String(minBin), l, h - 8);
+  ctx.textAlign = 'right';
+  ctx.fillText(String(maxBin), r, h - 8);
+  ctx.textAlign = 'left';
+}
+
+function formatProviderError(details) {
+  const parts = [];
+  for (const [provider, message] of Object.entries(details || {})) {
+    parts.push(`${provider}: ${message}`);
+  }
+  return parts.length ? parts.join(' | ') : 'Unknown provider error';
+}
+
+function median(values) {
+  const a = values.filter(Number.isFinite).slice().sort((x, y) => x - y);
+  if (!a.length) return 0;
+  const mid = Math.floor(a.length / 2);
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+}
+
+function fmtPct(value) {
+  if (!Number.isFinite(value)) return '—';
+  if (Math.abs(value) >= 100) return value.toFixed(0) + '%';
+  if (Math.abs(value) >= 10) return value.toFixed(1) + '%';
+  return value.toFixed(2) + '%';
+}
+
+function fmtNum(value) {
+  if (!Number.isFinite(value)) return '—';
+  if (Math.abs(value) >= 100) return value.toFixed(1);
+  if (Math.abs(value) >= 10) return value.toFixed(2);
+  if (Math.abs(value) >= 1) return value.toFixed(3);
+  return value.toExponential(2);
+}
+
+function peakRows(state, count = 10) {
+  if (!state || !state.bins) return [];
+  const totalPower = state.bins.slice(1).reduce((sum, bin) => sum + bin.power, 0) || 1;
+  const medianPower = median(state.bins.slice(1).map(bin => bin.power).filter(value => value > 0)) || 1e-12;
+  return state.bins.slice(1)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, count)
+    .map(bin => {
+      const period = state.residual.length / bin.bin;
+      const powerPct = bin.power / totalPower * 100;
+      const p2m = bin.power / medianPower;
+      let oneWayPct = null;
+      let peakToTroughPct = null;
+      if (state.mode === 'log') {
+        const logAmp = state.scale === 'zscore' ? bin.mag * state.rawResidualStd : bin.mag;
+        oneWayPct = (Math.exp(logAmp) - 1) * 100;
+        peakToTroughPct = (Math.exp(2 * logAmp) - 1) * 100;
+      }
+      return { bin: bin.bin, period, mag: bin.mag, powerPct, p2m, oneWayPct, peakToTroughPct };
+    });
+}
+
+function updatePeakTable(state) {
+  const wrap = $('peakTableWrap');
+  if (!wrap) return;
+  if (!state) {
+    wrap.innerHTML = '<div class="peak-note">Load a ticker to see FFT peak metrics.</div>';
+    return;
+  }
+  const rows = peakRows(state, 10);
+  wrap.innerHTML = `
+    <table class="peak-table">
+      <thead><tr>
+        <th>Peak</th><th>Bin</th><th>Period</th><th>Mag</th><th>Power %</th><th>Peak/noise</th><th>1-way %</th><th>P→T %</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((row, i) => `<tr data-bin="${row.bin}" class="${isBinSelected(row.bin) ? 'selected' : ''}">
+          <td>F${i + 1}</td>
+          <td>${row.bin}</td>
+          <td>${row.period.toFixed(row.period >= 100 ? 0 : 1)} days</td>
+          <td>${fmtNum(row.mag)}</td>
+          <td>${fmtPct(row.powerPct)}</td>
+          <td>${fmtNum(row.p2m)}×</td>
+          <td>${fmtPct(row.oneWayPct)}</td>
+          <td>${fmtPct(row.peakToTroughPct)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div class="peak-note">% swing is an approximate historical residual swing, only shown for log-price analysis. It is not a forecast.</div>`;
+  wrap.querySelectorAll('tr[data-bin]').forEach(row => {
+    row.addEventListener('click', () => {
+      toggleSelectedBin(Number(row.dataset.bin));
+    });
+  });
+}
+
+
+function updateSelectedPeakInfo(state) {
+  const wrap = $('selectedPeakWrap');
+  if (!wrap) return;
+  const bins = activeSelectedBins(state);
+  if (!state || !bins.length) {
+    wrap.innerHTML = 'Click spectrum bars or peak-table rows to select/deselect frequency components. Selected peaks stay highlighted and overlay as a combined historical DFT wave.';
+    return;
+  }
+  const infos = bins.map(bin => selectedBinInfo(state, bin)).filter(Boolean);
+  const totalPower = state.bins.slice(1).reduce((sum, item) => sum + item.power, 0) || 1;
+  const selectedPowerPct = infos.reduce((sum, info) => sum + info.powerPct, 0);
+  const label = bins.map(bin => {
+    const period = state.residual.length / bin;
+    return `${bin} (${period.toFixed(period >= 100 ? 0 : 1)}d)`;
+  }).join(', ');
+  let oneWay = '—';
+  let ptt = '—';
+  if (state.mode === 'log') {
+    const component = reconstructBinsComponent(state, bins) || [];
+    const amp = Math.max(...component.map(v => Math.abs(v))) * (state.scale === 'zscore' ? state.rawResidualStd : 1);
+    oneWay = fmtPct((Math.exp(amp) - 1) * 100);
+    ptt = fmtPct((Math.exp(2 * amp) - 1) * 100);
+  }
+  wrap.innerHTML = `
+    <div class="title">Historical DFT component overlay: ${bins.length} selected peak${bins.length === 1 ? '' : 's'}</div>
+    <div class="grid">
+      <div class="cell">Bins / periods<b>${label}</b></div>
+      <div class="cell">Selected power<b>${fmtPct(selectedPowerPct)}</b></div>
+      <div class="cell">Approx 1-way<b>${oneWay}</b></div>
+      <div class="cell">Approx P→T<b>${ptt}</b></div>
+    </div>
+    <div class="peak-note">Click a highlighted bar/row again to deselect it. Overlay is a historical reconstruction of the selected DFT bin(s), not a forecast.</div>`;
+}
+
+function updateMetrics(state) {
+  if (!state) {
+    $('metrics').innerHTML = [
+      ['Ticker/source', 'No data loaded'],
+      ['Top bins', ''],
+      ['Low energy', ''],
+      ['Mid / high', '']
+    ].map(item => `<div class="metric"><div class="k">${item[0]}</div><div class="v">${item[1]}</div></div>`).join('');
+    $('priceMeta').textContent = '';
+    if ($('fftInputMeta')) $('fftInputMeta').textContent = '';
+      $('spectrumMeta').textContent = '';
+    if ($('projectionMeta')) $('projectionMeta').textContent = '';
+    updatePeakTable(null);
+    updateSelectedPeakInfo(null);
+    return;
+  }
+
+  const top = state.bins.slice(1).sort((a, b) => b.value - a.value).slice(0, 3);
+  const topPeaks = peakRows(state, 3);
+  const topPowerPct = topPeaks[0]?.powerPct || 0;
+  const top3PowerPct = topPeaks.reduce((sum, row) => sum + row.powerPct, 0);
+  const rangeLabel = dateRangeLabel(state.rows);
+  $('priceMeta').textContent = `${currentName} · ${state.base.length} pts · ${state.mode}${rangeLabel ? ' · ' + rangeLabel : ''}`;
+  $('spectrumMeta').textContent = `${$('display').value} · exact N=${state.residual.length}`;
+
+  const totalPower = state.bins.slice(1).reduce((sum, bin) => sum + bin.power, 0) || 1;
+  const low = state.bins.filter(bin => bin.bin >= 1 && bin.bin <= 10).reduce((sum, bin) => sum + bin.power, 0) / totalPower * 100;
+  const mid = state.bins.filter(bin => bin.bin >= 11 && bin.bin <= 50).reduce((sum, bin) => sum + bin.power, 0) / totalPower * 100;
+  const high = 100 - low - mid;
+
+  $('metrics').innerHTML = [
+    ['Ticker/source', currentName],
+    ['Top bins', top.map(bin => bin.bin).join(', ')],
+    ['Top / top 3 power', topPowerPct.toFixed(1) + '% / ' + top3PowerPct.toFixed(1) + '%'],
+    ['Low / mid / high', low.toFixed(1) + '% / ' + mid.toFixed(1) + '% / ' + high.toFixed(1) + '%']
+  ].map(item => `<div class="metric"><div class="k">${item[0]}</div><div class="v">${item[1]}</div></div>`).join('');
+  updatePeakTable(state);
+  updateSelectedPeakInfo(state);
+}
+
+function updateTrendDebug(state, projection) {
+  const wrap = $('trendDebug');
+  if (!wrap) return;
+  if (!state) {
+    wrap.textContent = 'Load data to inspect trend parameters.';
+    return;
+  }
+
+  const signalProjection = projection ? buildSignalProjectionSeries(state, projection) : null;
+  const priceProjection = projection ? buildPriceProjectionSeries(state, projection) : null;
+  const N = state.base.length;
+  const trend = state.trend || [];
+  const trendParams = state.trendParams || {};
+  const projectedTrend = projection ? trendExtended(state, N + projection.horizon) : trend.slice();
+  const projectedSignal = signalProjection?.futureSignal || null;
+  const projectedRaw = priceProjection?.projectedRawPrice || null;
+  const lastRaw = state.prices?.[N - 1];
+  const lastProjectedRaw = projectedRaw && Number.isFinite(projectedRaw[N - 1]) ? projectedRaw[N - 1] : NaN;
+  const firstFutureProjectedRaw = projectedRaw && Number.isFinite(projectedRaw[N]) ? projectedRaw[N] : NaN;
+
+  const lines = [
+    `fit mode: ${trendParams.fitMode || state.trendFitMode || 'n/a'}`,
+    `N: ${N}`,
+    `signal[0]: ${formatSignalValue(state, state.base[0])}`,
+    `signal[N-1]: ${formatSignalValue(state, state.base[N - 1])}`,
+    `trend[0]: ${formatSignalValue(state, trend[0])}`,
+    `trend[N-1]: ${formatSignalValue(state, trend[N - 1])}`,
+    `trendFuture[N]: ${formatSignalValue(state, projectedTrend[N])}`,
+    `intercept: ${Number.isFinite(trendParams.trendIntercept) ? trendParams.trendIntercept.toFixed(6) : 'n/a'}`,
+    `slope: ${Number.isFinite(trendParams.trendSlope) ? trendParams.trendSlope.toFixed(6) : 'n/a'}`,
+    `slope multiplier: ${Number.isFinite(trendParams.trendSlopeMultiplier) ? trendParams.trendSlopeMultiplier.toFixed(3) : 'n/a'}`,
+    `offset: ${Number.isFinite(trendParams.trendOffset) ? trendParams.trendOffset.toFixed(6) : 'n/a'}`,
+    `residual mean: ${Number.isFinite(state.rawResidualMean) ? state.rawResidualMean.toFixed(6) : 'n/a'}`,
+    `residual std: ${Number.isFinite(state.rawResidualStd) ? state.rawResidualStd.toFixed(6) : 'n/a'}`,
+    `last raw price: ${formatRawPriceValue(lastRaw)}`,
+    `last projected raw price @ N-1: ${formatRawPriceValue(lastProjectedRaw)}`,
+    `first future projected raw price @ N: ${formatRawPriceValue(firstFutureProjectedRaw)}`
+  ];
+  if (projectedSignal) {
+    lines.push(`future projected signal @ N: ${formatSignalValue(state, projectedSignal[N])}`);
+  }
+  wrap.textContent = lines.join(' · ');
+}
+
+
+function buildSignalProjectionSeries(state, projection) {
+  if (!state || !projection || state.mode === 'return') return null;
+  const N = state.base.length;
+  const length = N + projection.horizon;
+  const labels = buildProjectionLabels(state, projection.horizon);
+  const projectedTrend = trendExtended(state, length, labels);
+  const realResidual = projection.projected.map(value => projectedResidualToSignalUnits(state, value));
+  const projectedSignal = realResidual.map((value, i) => {
+    if (!Number.isFinite(value) || !Number.isFinite(projectedTrend[i])) return NaN;
+    return projectedTrend[i] + value;
+  });
+  return {
+    actualSignal: state.base.concat(new Array(projection.horizon).fill(NaN)),
+    trendSignal: projectedTrend,
+    futureSignal: new Array(Math.max(0, N - 1)).fill(NaN).concat([state.base[N - 1]]).concat(projectedSignal.slice(N))
+  };
+}
+
+function plotFftInputChart(state) {
+  const canvas = $('fftInputChart');
+  if (!canvas) return;
+  if (!state) {
+    drawEmpty(canvas, 'Load data to see transformed signal');
+    if ($('fftInputMeta')) $('fftInputMeta').textContent = '';
+    return;
+  }
+  const projection = buildTopNProjection(state);
+  const labels = projection ? buildProjectionLabels(state, projection.horizon) : state.dates;
+  const ticks = projection ? buildProjectionTicks(state, projection.horizon) : null;
+  const signalProjection = projection ? buildSignalProjectionSeries(state, projection) : null;
+  if (signalProjection) {
+    plot(canvas, [
+      { values: signalProjection.actualSignal, color: '#62e2d1', width: 2, alpha: 0.95 },
+      { values: signalProjection.trendSignal, color: '#f2bf68', width: 2, alpha: 0.9 },
+      { values: signalProjection.futureSignal, color: '#ff6e85', width: 2, alpha: 0.95, dash: [6, 5] }
+    ], labels, ticks ? { customTicks: ticks } : {});
+  } else {
+    plot(canvas, [
+      { values: state.base, color: '#62e2d1', width: 2, alpha: 0.95 },
+      { values: state.trend, color: '#f2bf68', width: 2, alpha: 0.9 }
+    ], state.dates);
+  }
+  if ($('fftInputMeta')) {
+    const baseName = state.mode === 'log' ? 'log(price)' : state.mode === 'raw' ? 'raw price' : 'log returns';
+    const fitName = state.trendMethod === 'linear' ? `${state.trendFitMode === 'leastSquares' ? 'least-squares' : 'first+last'} linear` : state.trendMethod;
+    $('fftInputMeta').textContent = `${baseName} + adjusted ${fitName} trend; dashed line shows the same future signal scenario before inverse-log conversion`;
+  }
+}
+
+function redrawPriceChartOnly() {
+  if (!lastState) return;
+  const projection = buildTopNProjection(lastState);
+  plotPriceChartWithProjection(lastState, projection);
+}
+
+function render() {
+  if (!rawRows.length) {
+    drawEmpty($('priceChart'), 'Load a ticker');
+    if ($('fftInputChart')) drawEmpty($('fftInputChart'), 'FFT input appears after data loads');
+    drawEmpty($('spectrumChart'), 'Spectrum appears after data loads');
+    if ($('projectionChart')) drawEmpty($('projectionChart'), 'Projection appears after data loads');
+    if ($('trendDebug')) $('trendDebug').textContent = 'Load data to inspect trend parameters.';
+    updateMetrics(null);
+    $('loadStatus').textContent = 'Load a ticker through the local server.';
+    return;
+  }
+
+  try {
+    const state = compute();
+    if (!state) {
+      renderEmptyState();
+      return;
+    }
+    selectedBins = activeSelectedBins(state);
+    if (selectedBin !== null && !selectedBins.includes(selectedBin)) selectedBin = selectedBins.length ? selectedBins[selectedBins.length - 1] : null;
+    const projection = buildTopNProjection(state);
+    plotPriceChartWithProjection(state, projection);
+    plotFftInputChart(state);
+    lastState = state;
+    plotProjectionChart(state);
+    plotBars($('spectrumChart'), state.bins);
+    updateMetrics(state);
+    updateTrendDebug(state, projection);
+
+    const activeLabel = rangeState.active
+      ? ` Active date filter: ${rangeState.start || 'start'} to ${rangeState.end || 'latest'} (${dateRangeLabel(state.rows)}).`
+      : ` Full dataset active (${dateRangeLabel(state.rows)}).`;
+    $('loadStatus').textContent = `Loaded ${rawRows.length} rows; analyzing ${state.rows.length} selected rows.${activeLabel} FFT is run on normalized residual.`;
+  } catch (e) {
+    $('loadStatus').textContent = e.message;
+  }
+}
+
+function renderEmptyState() {
+  drawEmpty($('priceChart'), 'Load a ticker');
+  if ($('fftInputChart')) drawEmpty($('fftInputChart'), 'FFT input appears after data loads');
+  drawEmpty($('spectrumChart'), 'Spectrum appears after data loads');
+  if ($('projectionChart')) drawEmpty($('projectionChart'), 'Projection appears after data loads');
+  if ($('trendDebug')) $('trendDebug').textContent = 'Load data to inspect trend parameters.';
+  updateMetrics(null);
+}
+
+async function loadTicker() {
+  const ticker = $('ticker').value.trim().toUpperCase();
+  if (!ticker) return;
+
+  $('loadStatus').textContent = `Loading real data for ${ticker} ...`;
+  try {
+    const res = await fetch(apiUrl(`/api/history?symbol=${encodeURIComponent(ticker)}&period=max&interval=1d`), {
+      cache: 'no-store'
+    });
+    const payload = await res.json().catch(() => null);
+    if (!payload) {
+      throw Error(`Bad JSON response from local server (HTTP ${res.status})`);
+    }
+    if (!res.ok || !payload.ok) {
+      throw Error(`${payload.error || `HTTP ${res.status}`}${payload.details ? `: ${formatProviderError(payload.details)}` : ''}`);
+    }
+
+    rawRows = normalizeHistoryRows(payload.rows);
+    analysisRows = [];
+    rangeState = { active: false, start: '', end: '' };
+    selectedBin = null;
+    selectedBins = [];
+    currentName = `${payload.symbol} · ${payload.provider}`;
+    setDateInputBounds();
+    $('startDate').value = '';
+    $('endDate').value = '';
+    $('windowPoints').value = String(Math.max(rawRows.length, 32));
+    render();
+    $('loadStatus').textContent = `Loaded ${rawRows.length} real rows for ${currentName}.`;
+  } catch (e) {
+    $('loadStatus').textContent = `Ticker load failed through local server: ${e.message}`;
+  }
+}
+
+function clearDateRange() {
+  $('startDate').value = '';
+  $('endDate').value = '';
+  rangeState = { active: false, start: '', end: '' };
+  analysisRows = [];
+  $('windowPoints').value = String(Math.max(rawRows.length, 32));
+  render();
+}
+
+function applyDateRange() {
+  if (!rawRows.length) {
+    $('loadStatus').textContent = 'Load a ticker before setting a date range.';
+    return;
+  }
+
+  const { start, end } = readDateInputs();
+  const nextRange = { active: Boolean(start || end), start, end };
+  const previous = { ...rangeState };
+  rangeState = nextRange;
+  const rows = selectedRows();
+
+  if (rows.length < 16) {
+    rangeState = previous;
+    $('loadStatus').textContent = `Date range selected ${rows.length} rows. Choose a wider range, choose dates inside the dataset, or click Clear date range.`;
+    return;
+  }
+
+  analysisRows = [];
+  render();
+}
+
+$('loadTicker').onclick = loadTicker;
+$('rerun').onclick = render;
+$('setRange').onclick = applyDateRange;
+$('clearRange').onclick = clearDateRange;
+// Date inputs do not auto-run. Pick dates, then click Set date range.
+
+['priceMode', 'windowPoints', 'trendMethod', 'trendFitMode', 'emaWindow', 'scaleMethod', 'display', 'fftMinBin', 'fftMaxBin', 'topNPeaks', 'projectionHorizon', 'showProjection', 'projectionRank', 'trendSlopeMultiplier', 'trendOffset'].forEach(id => {
+  const el = $(id);
+  el.addEventListener('input', render);
+  el.addEventListener('change', render);
+});
+
+$('spectrumChart').addEventListener('click', event => {
+  if (!lastState || !lastState.bins) return;
+  const canvas = $('spectrumChart');
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const l = 44, r = rect.width - 14;
+  const { minBin, maxBin } = fftZoomRange(lastState.bins);
+  const n = Math.max(1, maxBin - minBin + 1);
+  const ratio = Math.max(0, Math.min(1, (x - l) / Math.max(1, r - l)));
+  const clickedBin = Math.max(minBin, Math.min(maxBin, Math.round(minBin + ratio * Math.max(1, n - 1))));
+  toggleSelectedBin(clickedBin);
+});
+
+$('priceChart').addEventListener('mousemove', event => {
+  if (!lastState) return;
+  const canvas = $('priceChart');
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const l = 44, r = rect.width - 14;
+  const projection = buildTopNProjection(lastState);
+  const totalLen = projection ? lastState.residual.length + projection.horizon : lastState.base.length;
+  const ratio = Math.max(0, Math.min(1, (x - l) / Math.max(1, r - l)));
+  priceHoverIndex = Math.max(0, Math.min(totalLen - 1, Math.round(ratio * Math.max(1, totalLen - 1))));
+  redrawPriceChartOnly();
+});
+$('priceChart').addEventListener('mouseleave', () => {
+  priceHoverIndex = null;
+  redrawPriceChartOnly();
+});
+
+$('clearSelectedPeak').onclick = clearSelectedBins;
+
+if ($('trendReset')) $('trendReset').onclick = () => {
+  if ($('trendFitMode')) $('trendFitMode').value = 'leastSquares';
+  $('trendSlopeMultiplier').value = '1';
+  $('trendOffset').value = '0';
+  render();
+};
+if ($('trendFitEndpoints')) $('trendFitEndpoints').onclick = () => {
+  if ($('trendFitMode')) $('trendFitMode').value = 'endpoints';
+  $('trendSlopeMultiplier').value = '1';
+  $('trendOffset').value = '0';
+  render();
+};
+if ($('trendFlatter')) $('trendFlatter').onclick = () => {
+  const next = Math.max(-5, manualTrendSlopeMultiplier() - 0.1);
+  $('trendSlopeMultiplier').value = next.toFixed(2);
+  render();
+};
+if ($('trendSteeper')) $('trendSteeper').onclick = () => {
+  const next = Math.min(5, manualTrendSlopeMultiplier() + 0.1);
+  $('trendSlopeMultiplier').value = next.toFixed(2);
+  render();
+};
+
+setDateInputBounds();
+renderEmptyState();
+</script>
+</body>
+</html>

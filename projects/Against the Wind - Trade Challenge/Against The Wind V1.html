@@ -1,0 +1,1629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Against the Wind - Supply Loop Prototype</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #020617;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .shell {
+      width: min(1320px, 100%);
+      display: grid;
+      grid-template-columns: 1fr 350px;
+      gap: 16px;
+    }
+    .game-panel, .side-panel {
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      background: #0f172a;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+    }
+    .topbar {
+      min-height: 68px;
+      padding: 12px 16px;
+      background: rgba(2,6,23,0.88);
+      border-bottom: 1px solid rgba(34,211,238,0.18);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    h1 { margin: 0; font-size: 22px; line-height: 1; }
+    .subtitle { margin-top: 5px; color: #a5f3fc; font-size: 13px; }
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    button { border: 0; color: white; font-weight: 850; border-radius: 12px; padding: 10px 12px; cursor: pointer; background: #0e7490; }
+    button:hover { filter: brightness(1.12); }
+    button.secondary { background: #d97706; }
+    canvas { width: 100%; display: block; background: radial-gradient(circle at center, #155e75 0%, #1e3a8a 50%, #020617 100%); cursor: crosshair; }
+    .side-panel { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .card { background: #1e293b; border-radius: 14px; padding: 13px; }
+    .card h2, .card h3 { margin: 0 0 8px; font-size: 17px; }
+    .card p { margin: 0; color: #cbd5e1; font-size: 14px; line-height: 1.4; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat { background: #1e293b; border-radius: 14px; padding: 12px; }
+    .label { color: #94a3b8; font-size: 11px; font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase; }
+    .value { margin-top: 4px; font-size: 24px; font-weight: 950; }
+    .bar { height: 8px; border-radius: 99px; background: #334155; margin-top: 8px; overflow: hidden; position: relative; }
+    .fill { height: 100%; width: 100%; background: #84cc16; }
+    .marker { position: absolute; top: 0; width: 2px; height: 100%; background: rgba(255,255,255,0.9); }
+    .row { display: grid; grid-template-columns: 80px 1fr 42px; gap: 8px; align-items: center; margin: 7px 0; }
+    .mini { font-size: 12px; color: #cbd5e1; }
+    .hint { color: #67e8f9; }
+    kbd { background: #020617; border: 1px solid #475569; border-bottom-width: 2px; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+    @media (max-width: 980px) { .shell { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="game-panel">
+      <div class="topbar">
+        <div>
+          <h1>Against the Wind</h1>
+          <div class="subtitle">Free-roam supply survival: food, wood, medicine</div>
+        </div>
+        <div class="button-row">
+          <button id="windSightButton">Hide Wind Sight</button>
+          <button id="resetButton" class="secondary">Reset</button>
+        </div>
+      </div>
+      <canvas id="game" width="1000" height="650"></canvas>
+    </section>
+
+    <aside class="side-panel">
+      <div class="card">
+        <h2>World State</h2>
+        <p id="message">No guided deliveries. Dock at villages, take their excess, and refill shortages before every village falls into chaos.</p>
+      </div>
+
+      <div class="card">
+        <h3>Notifications</h3>
+        <div id="notificationPanel"><p class="mini">No warnings yet.</p></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="label">Hull</div><div class="value" id="hullValue">100%</div><div class="bar"><div class="fill" id="hullFill" style="background:#38bdf8"></div></div></div>
+        <div class="stat"><div class="label">Cargo</div><div class="value" id="cargoValue">0/120</div><div class="bar"><div class="fill" id="cargoFill" style="background:#fde68a;width:0%"></div></div></div>
+        <div class="stat"><div class="label">Chaos Villages</div><div class="value" id="chaosValue" style="color:#fca5a5;">0</div><div class="label" style="margin-top:8px;">all chaos = lose</div></div>
+        <div class="stat"><div class="label">Route Trust</div><div class="value" id="trustValue" style="color:#86efac;">0</div><div class="label" style="margin-top:8px;">stability score</div></div>
+        <div class="stat"><div class="label">Sail State</div><div class="value" id="sailStateValue">Reach</div><div class="label" id="speedValue" style="margin-top:8px;">Speed 0</div></div>
+        <div class="stat"><div class="label">Weather</div><div class="value" id="weatherValue" style="color:#c4b5fd;font-size:20px;">Clear</div><div class="label" style="margin-top:8px;">active hazards</div></div>
+        <div class="stat"><div class="label">Blessings</div><div class="value" id="blessingValue" style="color:#fde68a;font-size:18px;">None</div><div class="label" style="margin-top:8px;">from holy waterspouts</div></div>
+        <div class="stat"><div class="label">Friendly Sailors</div><div class="value" id="friendlyValue" style="color:#67e8f9;">0</div><div class="label" style="margin-top:8px;">helping trade</div></div>
+      </div>
+
+      <div class="card">
+        <h3>Your Cargo</h3>
+        
+        <div id="cargoPanel"></div>
+      </div>
+
+      <div class="card">
+        <h3>Docked Village</h3>
+        <p id="dockName" class="hint">Not docked</p>
+        <div id="villagePanel"></div>
+        <p class="mini" style="margin-top:8px;">White markers: left = poverty line, right = excess line. Villages give excess for free. Villages barter only when buying needed supplies from you; payment can come from resources above poverty.</p>
+      </div>
+
+      <div class="card">
+        <h3>Controls</h3>
+        <p>
+          <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd> turn.<br />
+          <kbd>W</kbd>/<kbd>↑</kbd> raises sail. <kbd>S</kbd>/<kbd>↓</kbd> reefs sail.<br />
+          <kbd>1</kbd> supply just above starvation. <kbd>2</kbd> supply to middle. <kbd>3</kbd> supply to excess line.<br />
+          <kbd>4</kbd> build church in docked village. Requires all resources above poverty.<br />
+          <kbd>5</kbd> accept/refuse hull repairs from towns.<br />
+          Click/drag to point the ship. <kbd>Space</kbd> broadside. <kbd>P</kbd> pause.
+        </p>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const VIEW_W = canvas.width;
+    const VIEW_H = canvas.height;
+    const WORLD_W = 2300;
+    const WORLD_H = 1650;
+    const MAX_HULL = 100;
+    const CARGO_CAPACITY = 120;
+    const BROADSIDE_RELOAD = 1.05;
+    const SURVIVAL_LINE = 28;
+    const STABLE_LINE = 30;
+    const EXCESS_LINE = 76;
+    const CHURCH_RESOURCE_COST = 10;
+    const CHURCH_WOOD_COST = CHURCH_RESOURCE_COST;
+    const CONVERTED_GIVE_LINE = Math.round((SURVIVAL_LINE + EXCESS_LINE) / 2);
+    const TRADE_LINE = SURVIVAL_LINE;
+    const SUPPLIES = ["food", "wood", "medicine"];
+    const SUPPLY_META = {
+      food: { label: "Food", color: "#84cc16" },
+      wood: { label: "Wood", color: "#d97706" },
+      medicine: { label: "Medicine", color: "#a78bfa" }
+    };
+
+    const BASE_VILLAGES = [
+      // 9 villages total: 3 food, 4 wood, 2 medicine.
+      // All villages start at the middle of the stable range: between poverty and excess.
+      // Production differences emerge over time from each village's produces field.
+      { id: 0, name: "Home Harbor", x: 180, y: 1360, r: 52, color: "#86efac", produces: "food", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 1, name: "East Village", x: 1900, y: 250, r: 58, color: "#bbf7d0", produces: "food", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 2, name: "Sunfruit Cay", x: 2140, y: 700, r: 50, color: "#fef08a", produces: "food", supplies: { food: 52, wood: 52, medicine: 52 } },
+
+      { id: 3, name: "Pine Dock", x: 1080, y: 1330, r: 58, color: "#a7f3d0", produces: "wood", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 4, name: "Northlight", x: 850, y: 160, r: 50, color: "#bfdbfe", produces: "wood", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 5, name: "Cedarwatch", x: 2040, y: 1250, r: 52, color: "#bbf7d0", produces: "wood", supplies: { food: 52, wood: 52, medicine: 52 } },
+
+      { id: 6, name: "Reefhaven", x: 520, y: 420, r: 56, color: "#67e8f9", produces: "medicine", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 7, name: "Fogbell", x: 1280, y: 680, r: 48, color: "#ddd6fe", produces: "wood", supplies: { food: 52, wood: 52, medicine: 52 } },
+      { id: 8, name: "Herb Isle", x: 520, y: 1040, r: 50, color: "#c4b5fd", produces: "medicine", supplies: { food: 52, wood: 52, medicine: 52 } }
+    ];
+
+    const ui = {
+      message: document.getElementById("message"),
+      hullValue: document.getElementById("hullValue"), hullFill: document.getElementById("hullFill"),
+      cargoValue: document.getElementById("cargoValue"), cargoFill: document.getElementById("cargoFill"),
+      chaosValue: document.getElementById("chaosValue"), trustValue: document.getElementById("trustValue"),
+      sailStateValue: document.getElementById("sailStateValue"), speedValue: document.getElementById("speedValue"),
+      weatherValue: document.getElementById("weatherValue"),
+      blessingValue: document.getElementById("blessingValue"),
+      friendlyValue: document.getElementById("friendlyValue"),
+      cargoPanel: document.getElementById("cargoPanel"), dockName: document.getElementById("dockName"), villagePanel: document.getElementById("villagePanel"),
+      notificationPanel: document.getElementById("notificationPanel"),
+      windSightButton: document.getElementById("windSightButton"), resetButton: document.getElementById("resetButton")
+    };
+
+    let state;
+    let keys = {};
+    let mouseDown = false;
+    let last = performance.now();
+
+    function spawnFriendlySailors() {
+      if (!state) return;
+      const starts = [0, 3, 6, 7].filter(id => state.villages && state.villages[id]);
+      state.friendlySailors = starts.map((id, i) => {
+        const v = state.villages[id];
+        return {
+          x: v.x + 40 + Math.random() * 40,
+          y: v.y - 30 + Math.random() * 40,
+          angle: Math.random() * Math.PI * 2,
+          cargo: { food: 0, wood: 0, medicine: 0 },
+          capacity: 55,
+          targetId: state.villages[(id + 1) % state.villages.length].id,
+          hp: 42,
+          alive: true,
+          dockTimer: 0,
+          name: "Trader " + (i + 1)
+        };
+      });
+    }
+
+    function reset() {
+      const start = BASE_VILLAGES[0];
+      state = {
+        villages: BASE_VILLAGES.map(v => ({
+          ...v,
+          supplies: { ...v.supplies },
+          chaos: false,
+          church: false,
+          chaosTimer: 0,
+          pirateTimer: 4 + Math.random() * 5,
+          stableAlert: { food: false, wood: false, medicine: false }
+        })),
+        pos: { x: start.x + 35, y: start.y - 15 },
+        headingAngle: -0.55,
+        sailPower: 1,
+        time: 0,
+        hull: MAX_HULL,
+        cargo: { food: 0, wood: 0, medicine: 0 },
+        give: { food: true, wood: true, medicine: true },
+        supplyMode: 2,
+        acceptRepairs: true,
+        dockedId: null,
+        trail: [],
+        paused: false,
+        gameOver: false,
+        windSight: true,
+        trust: 0,
+        speed: 0,
+        speedState: "Reach",
+        noSailPressure: 0,
+        reload: 0,
+        flash: 0,
+        tick: 0,
+        cam: { x: 0, y: 0 },
+        cannonballs: [], pirateShots: [], particles: [], pirates: [],
+        friendlySailors: [],
+        seaMonsters: [], monsterTimer: 20,
+        weatherEvents: [], weatherTimer: 10, weatherAlert: "Clear",
+        notifications: [],
+        holySpouts: [], holySpoutTimer: 3,
+        blessings: { speed: 0, homeProduction: 0, globalProduction: 0 },
+        multiplayer: { connected: false, id: null, ws: null, others: {}, sendTimer: 0 },
+        messageTimer: 4,
+        message: "Keep villages above the survival line. Dock to exchange automatically: villages take needed cargo and give only excess."
+      };
+      state.trail = [{ ...state.pos }];
+      spawnFriendlySailors();
+      spawnSeaMonster();
+      updateCamera(1);
+      connectMultiplayer();
+      updateUI();
+    }
+
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function normalize(v) { const m = Math.hypot(v.x, v.y) || 1; return { x: v.x / m, y: v.y / m }; }
+    function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function angleToVec(a) { return { x: Math.cos(a), y: Math.sin(a) }; }
+    function wrapAngle(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
+    function turnToward(current, target, maxStep) { return current + clamp(wrapAngle(target - current), -maxStep, maxStep); }
+    function angleBetween(a, b) { return Math.abs(wrapAngle(Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x))); }
+    function cargoTotal() { return SUPPLIES.reduce((sum, s) => sum + state.cargo[s], 0); }
+    function cargoFree() { return Math.max(0, CARGO_CAPACITY - cargoTotal()); }
+
+    function screenToWorld(sx, sy) {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (sx - rect.left) * (canvas.width / rect.width) + state.cam.x, y: (sy - rect.top) * (canvas.height / rect.height) + state.cam.y };
+    }
+    function setHeadingToward(worldPoint) {
+      if (state.gameOver) return;
+      const dx = worldPoint.x - state.pos.x, dy = worldPoint.y - state.pos.y;
+      if (Math.hypot(dx, dy) > 4) state.headingAngle = Math.atan2(dy, dx);
+    }
+
+    function getSwirlCores(t) {
+      return [
+        { x: 620 + Math.sin(t * 0.35) * 220, y: 840 + Math.cos(t * 0.27) * 150, r: 420, power: 1.25, spin: 1 },
+        { x: 1400 + Math.cos(t * 0.31) * 260, y: 560 + Math.sin(t * 0.42) * 200, r: 460, power: 1.1, spin: -1 },
+        { x: 1280 + Math.sin(t * 0.55) * 340, y: 1180 + Math.cos(t * 0.38) * 180, r: 380, power: 0.95, spin: 1 },
+        { x: 1850 + Math.cos(t * 0.46) * 220, y: 900 + Math.sin(t * 0.33) * 210, r: 360, power: 0.9, spin: -1 }
+      ];
+    }
+
+    function windAt(x, y, t, future = 0) {
+      const tt = t + future;
+      let vx = -0.8, vy = 0;
+      const lane1 = Math.sin(y / 95 + tt * 1.15) * 0.7;
+      const lane2 = Math.sin((x + y * 0.6) / 160 - tt * 0.95) * 0.55;
+      const lane3 = Math.cos((x - y) / 210 + tt * 0.72) * 0.45;
+      vx += Math.cos(Math.PI + lane1 * 0.7 + lane2 * 0.45) * 0.55;
+      vy += Math.sin(Math.PI + lane1 * 0.7 + lane2 * 0.45) * 0.55 + lane3 * 0.32;
+      for (const s of getSwirlCores(tt)) {
+        const dx = x - s.x, dy = y - s.y;
+        const influence = Math.exp(-(dx * dx + dy * dy) / (s.r * s.r)) * s.power;
+        const invD = 1 / (Math.hypot(dx, dy) + 35);
+        vx += -dy * invD * influence * s.spin;
+        vy += dx * invD * influence * s.spin;
+      }
+      if (state && state.weatherEvents) {
+        for (const e of state.weatherEvents) {
+          const dx = x - e.x, dy = y - e.y;
+          const d2 = dx * dx + dy * dy;
+          const influence = Math.exp(-d2 / (e.r * e.r)) * (e.power || 1);
+          if (e.type === "squall") { vx += Math.cos(e.angle) * influence * 1.9; vy += Math.sin(e.angle) * influence * 1.9; }
+          if (e.type === "spout") { const invD = 1 / (Math.sqrt(d2) + 25); vx += -dy * invD * influence * e.spin * 2.5; vy += dx * invD * influence * e.spin * 2.5; }
+          if (e.type === "fog") { vx += Math.sin((x + e.angle * 30) / 80) * influence * 0.35; vy += Math.cos((y - e.angle * 30) / 80) * influence * 0.35; }
+          if (e.type === "storm") { vx += Math.cos(e.angle + Math.PI / 2) * influence * 0.9; vy += Math.sin(e.angle + Math.PI / 2) * influence * 0.9; }
+        }
+      }
+      const mag = Math.hypot(vx, vy) || 1;
+      return { x: vx / mag, y: vy / mag, strength: clamp(0.45 + mag * 0.55, 0.35, 1.65) };
+    }
+
+    function sailingPerformance(heading, wind) {
+      const deg = angleBetween(heading, wind) * 180 / Math.PI;
+      if (deg > 158) return { mult: 0.04, label: "In Irons", noSail: 1, deg };
+      if (deg > 132) return { mult: lerp(0.28, 0.72, (158 - deg) / 26), label: "Close-Hauled", noSail: clamp((deg - 132) / 26, 0, 1), deg };
+      if (deg > 70) return { mult: 1.12 + Math.sin((deg - 70) / 62 * Math.PI) * 0.28, label: "Reach", noSail: 0, deg };
+      if (deg > 28) return { mult: 0.9 + Math.sin((deg - 28) / 42 * Math.PI) * 0.12, label: "Broad Reach", noSail: 0, deg };
+      return { mult: 0.62, label: "Running", noSail: 0, deg };
+    }
+
+    function fogsAt(entity) { return state.weatherEvents.filter(e => e.type === "fog" && e.life > 0 && dist(e, entity) < e.r); }
+    function canSeeTarget(observer, target) {
+      const targetFogs = fogsAt(target);
+      if (!targetFogs.length) return true;
+      const observerFogs = fogsAt(observer);
+      if (!observerFogs.length) return false;
+      return targetFogs.some(fog => dist(observer, fog) < fog.r);
+    }
+
+    function pushNotification(text, color = "#fde68a") {
+      if (!state.notifications) state.notifications = [];
+      state.notifications.unshift({ text, color, life: 18 });
+      state.notifications = state.notifications.slice(0, 6);
+    }
+
+    function updateNotifications(dt) {
+      if (!state.notifications) return;
+      for (const n of state.notifications) n.life -= dt;
+      state.notifications = state.notifications.filter(n => n.life > 0);
+    }
+
+    function renderNotifications() {
+      if (!ui.notificationPanel) return;
+      if (!state.notifications || !state.notifications.length) {
+        ui.notificationPanel.innerHTML = `<p class="mini">No warnings yet.</p>`;
+        return;
+      }
+      ui.notificationPanel.innerHTML = state.notifications.map(n =>
+        `<p class="mini" style="margin:0 0 7px;color:${n.color};">${n.text}</p>`
+      ).join("");
+    }
+
+    function updateVillages(dt) {
+      let chaosCount = 0;
+      for (const v of state.villages) {
+        // A village with a church is permanently stabilized and can never fall into chaos again.
+        if (v.church) {
+          v.chaos = false;
+          v.chaosTimer = 0;
+        }
+
+        if (!v.chaos) {
+          for (const s of SUPPLIES) {
+            const decay = s === "medicine" ? 0.22 : 0.34;
+            v.supplies[s] = clamp(v.supplies[s] - decay * dt, 0, 100);
+          }
+          const globalBless = state.blessings ? state.blessings.globalProduction : 0;
+          const homeBless = state.blessings && v.id === 0 ? state.blessings.homeProduction : 0;
+          const churchBoost = v.church ? 0.25 : 0;
+          const productionRate = 1.15 * (1 + globalBless + homeBless + churchBoost);
+          v.supplies[v.produces] = clamp(v.supplies[v.produces] + productionRate * dt, 0, 100);
+        } else {
+          for (const s of SUPPLIES) v.supplies[s] = clamp(v.supplies[s] - 0.12 * dt, 0, 100);
+          v.pirateTimer -= dt;
+          if (v.pirateTimer <= 0) {
+            spawnPirateNear(v);
+            v.pirateTimer = 10 + Math.random() * 10;
+          }
+        }
+
+        for (const s of SUPPLIES) {
+          if (v.supplies[s] < STABLE_LINE && !v.stableAlert[s]) {
+            v.stableAlert[s] = true;
+            pushNotification(`${v.name} is below stable ${SUPPLY_META[s].label}.`, "#fbbf24");
+          }
+          if (v.supplies[s] >= STABLE_LINE + 4 && v.stableAlert[s]) {
+            v.stableAlert[s] = false;
+          }
+        }
+
+        const anyCritical = SUPPLIES.some(s => v.supplies[s] <= 2);
+        const abovePoverty = SUPPLIES.every(s => v.supplies[s] >= SURVIVAL_LINE);
+        const recovered = v.church && abovePoverty;
+        if (!v.church && !v.chaos && anyCritical) {
+          v.chaos = true;
+          v.chaosTimer = 0;
+          v.pirateTimer = 1;
+          state.message = `${v.name} has fallen into chaos. Pirates are forming around the harbor.`;
+          state.messageTimer = 4;
+          pushNotification(`${v.name} has fallen into CHAOS.`, "#f87171");
+        } else if (v.chaos && recovered) {
+          v.chaos = false;
+          state.trust += 12;
+          state.message = `${v.name} recovered from chaos after rising above the starvation line. The route network remembers this rescue.`;
+          state.messageTimer = 4;
+          pushNotification(`${v.name} recovered from chaos.`, "#86efac");
+          addParticles(v.x, v.y, 40, "#86efac");
+        }
+        if (v.chaos) chaosCount++;
+      }
+      if (state.villages.every(v => v.church)) {
+        state.gameOver = true;
+        state.message = "Victory. Every island has a church, and the trade world is permanently stabilized.";
+        state.messageTimer = 999;
+      } else if (chaosCount === state.villages.length) {
+        state.gameOver = true;
+        state.message = "Game over. All villages have fallen into chaos. The trade world collapsed.";
+        state.messageTimer = 999;
+      }
+    }
+
+    function choosePaymentResource(village, neededSupply) {
+      let best = null;
+      let bestScore = -Infinity;
+      for (const s of SUPPLIES) {
+        if (s === neededSupply) continue;
+        if (village.supplies[s] <= SURVIVAL_LINE) continue;
+        const excessBonus = village.supplies[s] > EXCESS_LINE ? 100 : 0;
+        const score = village.supplies[s] + excessBonus + Math.random() * 4;
+        if (score > bestScore) {
+          bestScore = score;
+          best = s;
+        }
+      }
+      return best;
+    }
+
+    function tradeRateForVillagePayment(village, paymentSupply) {
+      // If the village pays with true excess, that resource is cheap: player receives more.
+      // If the village pays from stable reserves, that resource is dear: player receives less.
+      return village.supplies[paymentSupply] > EXCESS_LINE ? 1.45 : 0.55;
+    }
+
+    function getDockedVillage() {
+      if (!state || !state.villages) return null;
+      let best = null;
+      let bestD = Infinity;
+      for (const v of state.villages) {
+        const d = dist(state.pos, v);
+        if (d < v.r + 72 && d < bestD) {
+          best = v;
+          bestD = d;
+        }
+      }
+      return best;
+    }
+
+    function updateDocking(dt) {
+      const dock = getDockedVillage();
+      state.dockedId = dock ? dock.id : null;
+      if (!dock) return;
+
+      const targetLevel = supplyTargetLevel();
+
+      // Barter: villages buy needed supplies from the player.
+      // They must pay using a different resource above the poverty/survival line.
+      for (const needed of SUPPLIES) {
+        if (!state.give[needed]) continue;
+        if (dock.supplies[needed] >= targetLevel) continue;
+        if (state.cargo[needed] <= 0) continue;
+
+        const payment = choosePaymentResource(dock, needed);
+        if (!payment) continue;
+
+        const rate = tradeRateForVillagePayment(dock, payment);
+        const availablePayment = dock.supplies[payment] - SURVIVAL_LINE;
+        const needAmount = targetLevel - dock.supplies[needed];
+
+        let giveAmount = Math.min(state.cargo[needed], needAmount, 12 * dt, availablePayment / rate);
+
+        if (giveAmount <= 0.001) continue;
+
+        // Important: giving cargo frees space first. If the ship is full,
+        // the village can still receive what it needs. Payment is limited to
+        // the space available after unloading, instead of blocking the trade.
+        const maxPaymentThatFits = cargoFree() + giveAmount;
+        const paymentAmount = Math.min(giveAmount * rate, availablePayment, maxPaymentThatFits);
+
+        state.cargo[needed] -= giveAmount;
+        dock.supplies[needed] += giveAmount;
+        dock.supplies[payment] -= paymentAmount;
+        state.cargo[payment] += paymentAmount;
+        state.trust += giveAmount * 0.035;
+      }
+
+      // Villages freely give any resource above the excess line.
+      for (const s of SUPPLIES) {
+        const giveLine = dock.church ? CONVERTED_GIVE_LINE : EXCESS_LINE;
+        if (dock.supplies[s] > giveLine && cargoFree() > 0) {
+          const giveSpeed = dock.church ? 22 : 14;
+          const amount = Math.min(dock.supplies[s] - giveLine, cargoFree(), giveSpeed * dt);
+          dock.supplies[s] -= amount;
+          state.cargo[s] += amount;
+        }
+      }
+
+      // Towns offer hull repair while docked. Repair consumes village wood,
+      // but the village will not repair you below its survival wood line.
+      if (state.acceptRepairs && state.hull < MAX_HULL && dock.supplies.wood > SURVIVAL_LINE) {
+        const repairAmount = Math.min(
+          MAX_HULL - state.hull,
+          (dock.supplies.wood - SURVIVAL_LINE) * 1.2,
+          9 * dt
+        );
+        state.hull += repairAmount;
+        dock.supplies.wood -= repairAmount / 1.2;
+      }
+    }
+
+    function friendlyCargoTotal(sailor) {
+      return SUPPLIES.reduce((sum, s) => sum + Math.max(0, sailor.cargo[s] || 0), 0);
+    }
+
+    function friendlyCargoFree(sailor) {
+      return Math.max(0, sailor.capacity - friendlyCargoTotal(sailor));
+    }
+
+    function nearestVillageTo(entity) {
+      let best = null;
+      let bestD = Infinity;
+      for (const v of state.villages) {
+        const d = dist(entity, v);
+        if (d < bestD) { bestD = d; best = v; }
+      }
+      return best;
+    }
+
+    function chooseFriendlyTarget(sailor) {
+      const current = nearestVillageTo(sailor);
+      const carrying = friendlyCargoTotal(sailor);
+      let best = null;
+      let bestScore = -Infinity;
+
+      for (const v of state.villages) {
+        if (current && v.id === current.id) continue;
+        let score = 0;
+
+        if (carrying > 1) {
+          for (const s of SUPPLIES) score += Math.max(0, STABLE_LINE - v.supplies[s]) * (sailor.cargo[s] || 0);
+        } else {
+          for (const s of SUPPLIES) score += Math.max(0, v.supplies[s] - EXCESS_LINE);
+        }
+
+        if (v.chaos && carrying <= 1) score -= 25;
+        if (v.chaos && carrying > 1) score += 18;
+        score += Math.random() * 5;
+
+        if (score > bestScore) { bestScore = score; best = v; }
+      }
+
+      if (!best) {
+        const options = state.villages.filter(v => !current || v.id !== current.id);
+        best = options[Math.floor(Math.random() * options.length)] || state.villages[0];
+      }
+      return best.id;
+    }
+
+    function spawnFriendlySailors() {
+      const starts = [0, 3, 6, 7];
+      state.friendlySailors = starts.map((id, i) => {
+        const v = state.villages[id % state.villages.length];
+        const sailor = {
+          x: v.x + 70 + Math.random() * 50,
+          y: v.y - 70 + Math.random() * 50,
+          angle: Math.random() * Math.PI * 2,
+          cargo: { food: 0, wood: 0, medicine: 0 },
+          capacity: 55,
+          targetId: null,
+          hp: 42,
+          alive: true,
+          dockTimer: 0,
+          stuckTimer: 0,
+          name: "Trader " + (i + 1)
+        };
+        sailor.targetId = chooseFriendlyTarget(sailor);
+        return sailor;
+      });
+    }
+
+    function friendlyDockTransfer(sailor, village, dt) {
+      // Conservation rule: every unit moved is subtracted from one inventory
+      // before being added to another. Friendly traders do not create resources.
+      for (const s of SUPPLIES) {
+        if (village.supplies[s] < STABLE_LINE && sailor.cargo[s] > 0) {
+          const amount = Math.min(sailor.cargo[s], STABLE_LINE - village.supplies[s], 10 * dt);
+          if (amount > 0) {
+            sailor.cargo[s] -= amount;
+            village.supplies[s] += amount;
+            state.trust += amount * 0.012;
+          }
+        }
+      }
+
+      for (const s of SUPPLIES) {
+        const giveLine = village.church ? CONVERTED_GIVE_LINE : EXCESS_LINE;
+        if (village.supplies[s] > giveLine && friendlyCargoFree(sailor) > 0) {
+          const giveSpeed = village.church ? 14 : 9;
+          const amount = Math.min(village.supplies[s] - giveLine, friendlyCargoFree(sailor), giveSpeed * dt);
+          if (amount > 0) {
+            village.supplies[s] -= amount;
+            sailor.cargo[s] += amount;
+          }
+        }
+      }
+
+      for (const s of SUPPLIES) {
+        sailor.cargo[s] = Math.max(0, sailor.cargo[s]);
+        village.supplies[s] = clamp(village.supplies[s], 0, 100);
+      }
+    }
+
+    function updateFriendlySailors(dt) {
+      for (const sailor of state.friendlySailors) {
+        if (!sailor.alive) continue;
+        sailor.dockTimer = Math.max(0, sailor.dockTimer - dt);
+        const target = state.villages.find(v => v.id === sailor.targetId) || state.villages[0];
+        const d = dist(sailor, target);
+
+        if (d < target.r + 52) {
+          friendlyDockTransfer(sailor, target, dt);
+          if (sailor.dockTimer <= 0) {
+            sailor.targetId = chooseFriendlyTarget(sailor);
+            sailor.dockTimer = 1.2;
+            sailor.stuckTimer = 0;
+          }
+        }
+
+        const next = state.villages.find(v => v.id === sailor.targetId) || target;
+        const desired = Math.atan2(next.y - sailor.y, next.x - sailor.x);
+        sailor.angle = turnToward(sailor.angle, desired, 1.85 * dt);
+        const dir = angleToVec(sailor.angle);
+        const w = windAt(sailor.x, sailor.y, state.time);
+        const perf = sailingPerformance(dir, w);
+        const speed = (42 + 20 * perf.mult) * clamp(w.strength, 0.55, 1.25);
+
+        sailor.x = clamp(sailor.x + (dir.x * speed + w.x * w.strength * 7) * dt, 35, WORLD_W - 35);
+        sailor.y = clamp(sailor.y + (dir.y * speed + w.y * w.strength * 7) * dt, 35, WORLD_H - 35);
+
+        if (d < target.r + 90) sailor.stuckTimer += dt;
+        else sailor.stuckTimer = 0;
+        if (sailor.stuckTimer > 6) {
+          sailor.targetId = chooseFriendlyTarget(sailor);
+          sailor.stuckTimer = 0;
+        }
+      }
+    }
+
+    function spawnPirateNear(v) {
+      const a = Math.random() * Math.PI * 2;
+      const d = v.r + 130 + Math.random() * 130;
+      state.pirates.push({ x: clamp(v.x + Math.cos(a) * d, 70, WORLD_W - 70), y: clamp(v.y + Math.sin(a) * d, 70, WORLD_H - 70), angle: a + Math.PI, hp: 2, maxHp: 2, reload: Math.random() * 1.5, seed: Math.random() * 10, alive: true, hitFlash: 0 });
+      state.pirates = state.pirates.slice(-16);
+    }
+
+    function blessingSummary() {
+      if (!state.blessings) return "None";
+      const parts = [];
+      if (state.blessings.speed > 0) parts.push(`Speed +${Math.round(state.blessings.speed * 100)}%`);
+      if (state.blessings.homeProduction > 0) parts.push(`Home +${Math.round(state.blessings.homeProduction * 100)}%`);
+      if (state.blessings.globalProduction > 0) parts.push(`Global +${Math.round(state.blessings.globalProduction * 100)}%`);
+      return parts.length ? parts.join(" / ") : "None";
+    }
+
+    function villageNeedScore(v) {
+      // Higher score means the village is closer to poverty/chaos.
+      let score = 0;
+      for (const s of SUPPLIES) {
+        score += Math.max(0, EXCESS_LINE - v.supplies[s]);
+        if (v.supplies[s] < SURVIVAL_LINE) score += 40;
+      }
+      if (v.chaos) score += 90;
+      return score;
+    }
+
+    function mostNeedyVillage() {
+      let best = state.villages[0];
+      let bestScore = -Infinity;
+      for (const v of state.villages) {
+        const score = villageNeedScore(v) + Math.random() * 18;
+        if (score > bestScore) {
+          bestScore = score;
+          best = v;
+        }
+      }
+      return best;
+    }
+
+    function holySpoutDelay() {
+      const worstNeed = Math.max(...state.villages.map(villageNeedScore));
+      if (worstNeed > 220) return 4 + Math.random() * 5;
+      if (worstNeed > 150) return 6 + Math.random() * 7;
+      if (worstNeed > 90) return 8 + Math.random() * 10;
+      return 12 + Math.random() * 14;
+    }
+
+    function holySpoutLocation() {
+      // Can spawn anywhere, but needy villages increase nearby spawn probability.
+      if (Math.random() < 0.35) {
+        return {
+          x: 250 + Math.random() * (WORLD_W - 500),
+          y: 220 + Math.random() * (WORLD_H - 440),
+          villageId: null
+        };
+      }
+
+      const weighted = state.villages.map(v => ({
+        village: v,
+        weight: 1 + villageNeedScore(v) / 28
+      }));
+      let total = weighted.reduce((sum, item) => sum + item.weight, 0);
+      let roll = Math.random() * total;
+      let chosen = weighted[0].village;
+      for (const item of weighted) {
+        roll -= item.weight;
+        if (roll <= 0) {
+          chosen = item.village;
+          break;
+        }
+      }
+
+      const angle = Math.random() * Math.PI * 2;
+      const range = chosen.r + 100 + Math.random() * 300;
+      return {
+        x: clamp(chosen.x + Math.cos(angle) * range, 120, WORLD_W - 120),
+        y: clamp(chosen.y + Math.sin(angle) * range, 120, WORLD_H - 120),
+        villageId: chosen.id
+      };
+    }
+
+    function spawnHolySpout() {
+      const loc = holySpoutLocation();
+      state.holySpouts.push({
+        x: loc.x,
+        y: loc.y,
+        r: 92,
+        life: 28,
+        maxLife: 28,
+        angle: Math.random() * Math.PI * 2,
+        used: false,
+        villageId: loc.villageId
+      });
+      state.holySpouts = state.holySpouts.slice(-3);
+      state.holySpoutTimer = holySpoutDelay();
+    }
+
+    function receiveBlessing() {
+      const roll = Math.random();
+      let text = "";
+      if (roll < 0.34) {
+        state.blessings.speed = Math.min(0.45, state.blessings.speed + 0.10);
+        text = "Blessing received: your ship sails faster.";
+      } else if (roll < 0.67) {
+        state.blessings.homeProduction = Math.min(1.0, state.blessings.homeProduction + 0.25);
+        text = "Blessing received: Home Harbor production increases.";
+      } else {
+        state.blessings.globalProduction = Math.min(0.6, state.blessings.globalProduction + 0.08);
+        text = "Blessing received: all villages produce slightly more.";
+      }
+      state.trust += 6;
+      addParticles(state.pos.x, state.pos.y, 70, "#fde68a");
+    }
+
+    function updateHolySpouts(dt) {
+      state.holySpoutTimer -= dt;
+      if (state.holySpoutTimer <= 0) spawnHolySpout();
+
+      for (const spout of state.holySpouts) {
+        spout.life -= dt;
+        spout.angle += dt * 3.2;
+        if (!spout.used && dist(spout, state.pos) < spout.r) {
+          spout.used = true;
+          spout.life = Math.min(spout.life, 1.5);
+          // Lift the ship briefly: repair a bit and scatter golden light.
+          state.hull = clamp(state.hull + 12, 0, MAX_HULL);
+          receiveBlessing();
+        }
+      }
+      state.holySpouts = state.holySpouts.filter(s => s.life > 0);
+    }
+
+    function spawnWeather() {
+      const x = 200 + Math.random() * (WORLD_W - 400), y = 160 + Math.random() * (WORLD_H - 320);
+      const a = Math.random() * Math.PI * 2, roll = Math.random();
+      let e;
+      if (roll < 0.32) e = { type: "squall", short: "Squall", name: "Black Squall", x, y, r: 260, life: 18, maxLife: 18, angle: a, vx: Math.cos(a) * 24, vy: Math.sin(a) * 24, power: 2.2 };
+      else if (roll < 0.58) e = { type: "spout", short: "Spout", name: "Waterspout", x, y, r: 225, life: 16, maxLife: 16, angle: a, vx: Math.cos(a) * 18, vy: Math.sin(a) * 18, power: 2.6, spin: Math.random() < 0.5 ? -1 : 1 };
+      else if (roll < 0.80) e = { type: "fog", short: "Fog", name: "Fog Bank", x, y, r: 310, life: 22, maxLife: 22, angle: a, vx: Math.cos(a) * 16, vy: Math.sin(a) * 16, power: 0.8 };
+      else e = { type: "storm", short: "Storm", name: "Lightning Storm", x, y, r: 280, life: 20, maxLife: 20, angle: a, vx: Math.cos(a) * 20, vy: Math.sin(a) * 20, power: 1.5, strikeTimer: 1.2 };
+      state.weatherEvents.push(e);
+      state.weatherEvents = state.weatherEvents.slice(-4);
+      state.weatherTimer = 9 + Math.random() * 10;
+      state.message = `${e.name} forming over the sea.`;
+      state.messageTimer = 3.2;
+    }
+
+    function updateWeather(dt) {
+      state.weatherTimer -= dt;
+      if (state.weatherTimer <= 0) spawnWeather();
+      for (const e of state.weatherEvents) {
+        e.life -= dt; e.x = clamp(e.x + e.vx * dt, 70, WORLD_W - 70); e.y = clamp(e.y + e.vy * dt, 70, WORLD_H - 70); e.angle += dt * 2.2;
+        const d = dist(e, state.pos);
+        if (d < e.r) {
+          const intensity = 1 - d / e.r;
+          if (e.type === "squall") { state.hull = clamp(state.hull - intensity * 4.5 * dt, 0, MAX_HULL); for (const s of SUPPLIES) state.cargo[s] = Math.max(0, state.cargo[s] - intensity * 0.55 * dt); }
+          if (e.type === "spout") { const pull = normalize({ x: e.x - state.pos.x, y: e.y - state.pos.y }); const tangent = { x: -pull.y * e.spin, y: pull.x * e.spin }; state.pos.x = clamp(state.pos.x + (pull.x * 55 + tangent.x * 72) * intensity * dt, 35, WORLD_W - 35); state.pos.y = clamp(state.pos.y + (pull.y * 55 + tangent.y * 72) * intensity * dt, 35, WORLD_H - 35); state.hull = clamp(state.hull - intensity * 7 * dt, 0, MAX_HULL); }
+          if (e.type === "storm") { e.strikeTimer -= dt; if (e.strikeTimer <= 0) { e.strikeTimer = 1 + Math.random() * 1.4; state.hull = clamp(state.hull - (7 + intensity * 10), 0, MAX_HULL); addParticles(state.pos.x, state.pos.y, 34, "#fde68a"); } }
+        }
+      }
+      state.weatherEvents = state.weatherEvents.filter(e => e.life > 0);
+      state.weatherAlert = state.weatherEvents.length ? state.weatherEvents.map(e => e.short).join(", ") : "Clear";
+    }
+
+    function makeSeaMonster(x, y) { const hp = 7; return { x, y, angle: Math.random() * Math.PI * 2, hp, maxHp: hp, life: 80, dive: 6 + Math.random() * 5, hitFlash: 0, attackCooldown: 0, targetTimer: 0, targetKind: null, targetIndex: null }; }
+    function spawnSeaMonster() { state.seaMonsters = [makeSeaMonster(900 + Math.random() * 700, 500 + Math.random() * 700)]; state.monsterTimer = 24 + Math.random() * 18; }
+    function updateSeaMonsters(dt) {
+      state.monsterTimer -= dt;
+      if (state.monsterTimer <= 0 && state.seaMonsters.length < 2) { state.seaMonsters.push(makeSeaMonster(200 + Math.random() * (WORLD_W - 400), 200 + Math.random() * (WORLD_H - 400))); state.monsterTimer = 28 + Math.random() * 20; }
+      for (const m of state.seaMonsters) {
+        m.life -= dt; m.hitFlash = Math.max(0, m.hitFlash - dt); m.dive = Math.max(0, m.dive - dt); m.attackCooldown = Math.max(0, m.attackCooldown - dt); m.targetTimer = Math.max(0, m.targetTimer - dt);
+        const ships = [{ kind: "player", index: -1, ref: state.pos }];
+        state.pirates.forEach((p, index) => { if (p.alive) ships.push({ kind: "pirate", index, ref: p }); });
+        state.friendlySailors.forEach((s, index) => { if (s.alive) ships.push({ kind: "friendly", index, ref: s }); });
+        let target = ships.find(s => s.kind === m.targetKind && s.index === m.targetIndex);
+        if (!target || dist(m, target.ref) > 840 || m.targetTimer <= 0) {
+          const candidates = ships.filter(s => dist(m, s.ref) < 840);
+          target = candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : null;
+          m.targetKind = target ? target.kind : null; m.targetIndex = target ? target.index : null; m.targetTimer = 3.5 + Math.random() * 3.5;
+        }
+        let targetAngle = target && m.dive <= 0 ? Math.atan2(target.ref.y - m.y, target.ref.x - m.x) : m.angle + Math.sin(state.time * 2 + m.x * 0.01) * 0.22;
+        m.angle = turnToward(m.angle, targetAngle, (m.dive > 0 ? 0.45 : 1.05) * dt);
+        const dir = angleToVec(m.angle), w = windAt(m.x, m.y, state.time), swimSpeed = m.dive > 0 ? 38 : 72;
+        m.x = clamp(m.x + (dir.x * swimSpeed + w.x * w.strength * 12) * dt, 35, WORLD_W - 35); m.y = clamp(m.y + (dir.y * swimSpeed + w.y * w.strength * 12) * dt, 35, WORLD_H - 35);
+        if (target && m.dive <= 0) {
+          const d = dist(m, target.ref);
+          if (d < 140) {
+            if (target.kind === "player") { state.hull = clamp(state.hull - 20 * dt, 0, MAX_HULL); for (const s of SUPPLIES) state.cargo[s] = Math.max(0, state.cargo[s] - 0.5 * dt); }
+            else if (target.kind === "pirate") { target.ref.hp -= 0.55 * dt; target.ref.hitFlash = 0.12; if (target.ref.hp <= 0) { target.ref.alive = false; addParticles(target.ref.x, target.ref.y, 30, "#93c5fd"); } }
+            else if (target.kind === "friendly") { target.ref.hp -= 0.45 * dt; if (target.ref.hp <= 0) { target.ref.alive = false; addParticles(target.ref.x, target.ref.y, 30, "#93c5fd"); } }
+          }
+          if (d < 68 && m.attackCooldown <= 0) {
+            if (target.kind === "player") { state.hull = clamp(state.hull - 28, 0, MAX_HULL); addParticles(state.pos.x, state.pos.y, 42, "#93c5fd"); state.message = "The leviathan struck your hull and vanished under the waves."; }
+            else if (target.kind === "pirate") { target.ref.hp -= 2; addParticles(target.ref.x, target.ref.y, 42, "#93c5fd"); if (target.ref.hp <= 0) { target.ref.alive = false; state.trust += 2; } state.message = "The leviathan smashed into a pirate ship and disappeared below."; }
+            else if (target.kind === "friendly") { target.ref.hp -= 2; addParticles(target.ref.x, target.ref.y, 42, "#93c5fd"); if (target.ref.hp <= 0) { target.ref.alive = false; state.trust = Math.max(0, state.trust - 4); } state.message = "The leviathan struck a friendly trader and vanished below."; }
+            m.attackCooldown = 2.2; m.dive = 1.4; m.targetTimer = 0; state.messageTimer = 2.8;
+          }
+        }
+      }
+      state.seaMonsters = state.seaMonsters.filter(m => m.life > 0 && m.hp > 0);
+    }
+
+    function connectMultiplayer() {
+      if (!location.hostname || location.protocol === "file:") return;
+      if (state.multiplayer.ws && state.multiplayer.ws.readyState <= 1) return;
+
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${protocol}://${location.host}`);
+      state.multiplayer.ws = ws;
+
+      ws.addEventListener("open", () => {
+        state.multiplayer.connected = true;
+        state.message = "Multiplayer connected. Other captains will appear as blue player ships.";
+        state.messageTimer = 3;
+      });
+
+      ws.addEventListener("message", event => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+        if (msg.type === "welcome") state.multiplayer.id = msg.id;
+        if (msg.type === "players") {
+          state.multiplayer.others = {};
+          for (const p of msg.players) {
+            if (p.id !== state.multiplayer.id) state.multiplayer.others[p.id] = p;
+          }
+        }
+      });
+
+      ws.addEventListener("close", () => {
+        state.multiplayer.connected = false;
+        state.multiplayer.others = {};
+      });
+    }
+
+    function updateMultiplayer(dt) {
+      const mp = state.multiplayer;
+      if (!mp || !mp.ws || mp.ws.readyState !== WebSocket.OPEN) return;
+      mp.sendTimer += dt;
+      if (mp.sendTimer < 0.08) return;
+      mp.sendTimer = 0;
+      mp.ws.send(JSON.stringify({
+        type: "state",
+        x: state.pos.x,
+        y: state.pos.y,
+        angle: state.headingAngle,
+        hull: state.hull,
+        cargo: Math.round(cargoTotal()),
+        sailState: state.speedState
+      }));
+    }
+
+    function drawOtherPlayers() {
+      if (!state.multiplayer || !state.multiplayer.others) return;
+      for (const id of Object.keys(state.multiplayer.others)) {
+        const p = state.multiplayer.others[id];
+        drawBoat(p.x, p.y, p.angle, "multiplayer", p.sailState || "Reach", 0);
+        ctx.save();
+        ctx.fillStyle = "rgba(2,6,23,0.75)";
+        roundRect(p.x - 34, p.y - 54, 68, 22, 8);
+        ctx.fill();
+        ctx.fillStyle = "#bfdbfe";
+        ctx.font = "800 12px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(`Captain ${id.slice(0, 3)}`, p.x, p.y - 39);
+        ctx.restore();
+      }
+    }
+
+    function fireBroadside() {
+      if (state.reload > 0 || state.gameOver) return;
+      const heading = angleToVec(state.headingAngle), sides = [{ x: -heading.y, y: heading.x }, { x: heading.y, y: -heading.x }];
+      for (const side of sides) for (let i = -1; i <= 1; i++) { const dir = normalize({ x: side.x + heading.x * i * 0.08, y: side.y + heading.y * i * 0.08 }); state.cannonballs.push({ x: state.pos.x + side.x * 26 + heading.x * i * 8, y: state.pos.y + side.y * 26 + heading.y * i * 8, vx: dir.x * 430, vy: dir.y * 430, life: 1.25, r: 5 }); }
+      state.reload = BROADSIDE_RELOAD; state.flash = 0.18; addParticles(state.pos.x, state.pos.y, 12, "#facc15");
+    }
+
+    function addParticles(x, y, count, color) { for (let i = 0; i < count; i++) { const a = Math.random() * Math.PI * 2, s = Math.random() * 120 + 40; state.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: Math.random() * 0.5 + 0.25, color }); } }
+
+    function update(dt) {
+      if (state.paused || state.gameOver) return;
+      state.time += dt; state.tick++; state.reload = Math.max(0, state.reload - dt); state.flash = Math.max(0, state.flash - dt); state.messageTimer = Math.max(0, state.messageTimer - dt);
+      if (typeof updateVillages === "function") updateVillages(dt);
+      if (typeof updateDocking === "function") updateDocking(dt);
+      if (typeof updateFriendlySailors === "function") updateFriendlySailors(dt);
+      if (typeof updateWeather === "function") updateWeather(dt);
+      if (typeof updateHolySpouts === "function") updateHolySpouts(dt);
+      if (typeof updateSeaMonsters === "function") updateSeaMonsters(dt);
+      if (typeof updateMultiplayer === "function") updateMultiplayer(dt);
+      if (typeof updateNotifications === "function") updateNotifications(dt);
+      if (keys["arrowleft"] || keys["a"]) state.headingAngle -= 2.4 * dt;
+      if (keys["arrowright"] || keys["d"]) state.headingAngle += 2.4 * dt;
+      if (keys["arrowup"] || keys["w"]) state.sailPower = clamp(state.sailPower + 1.4 * dt, 0.25, 1.2);
+      if (keys["arrowdown"] || keys["s"]) state.sailPower = clamp(state.sailPower - 1.8 * dt, 0.15, 1.2);
+      const heading = angleToVec(state.headingAngle), w = windAt(state.pos.x, state.pos.y, state.time), perf = sailingPerformance(heading, w);
+      state.speed = 70 * (1 + (state.blessings ? state.blessings.speed : 0)) * perf.mult * w.strength * state.sailPower; state.speedState = perf.label; state.noSailPressure = perf.noSail;
+      state.pos.x = clamp(state.pos.x + (heading.x * state.speed + w.x * w.strength * 9) * dt, 35, WORLD_W - 35); state.pos.y = clamp(state.pos.y + (heading.y * state.speed + w.y * w.strength * 9) * dt, 35, WORLD_H - 35);
+      if (state.tick % 5 === 0) { state.trail.push({ ...state.pos }); if (state.trail.length > 220) state.trail.shift(); }
+      updatePirates(dt); updateProjectiles(dt); updateParticles(dt); updateCamera(dt);
+      if (state.hull <= 0) {
+        state.hull = 0;
+        state.gameOver = true;
+        state.message = "Game over. Your ship was destroyed at sea.";
+        state.messageTimer = 999;
+      }
+    }
+
+    function updatePirates(dt) {
+      for (const p of state.pirates) {
+        if (!p.alive) continue; p.hitFlash = Math.max(0, p.hitFlash - dt); p.reload = Math.max(0, p.reload - dt);
+        const d = dist(p, state.pos), canSee = canSeeTarget(p, state.pos);
+        const targetAngle = d < 560 && canSee ? Math.atan2(state.pos.y - p.y, state.pos.x - p.x) : p.angle + Math.sin(state.time * 0.7 + p.seed) * 0.035;
+        p.angle = turnToward(p.angle, targetAngle, 1.45 * dt);
+        const dir = angleToVec(p.angle), w = windAt(p.x, p.y, state.time), perf = sailingPerformance(dir, w), speed = (34 + 26 * perf.mult) * clamp(w.strength, 0.5, 1.3);
+        p.x = clamp(p.x + (dir.x * speed + w.x * w.strength * 13) * dt, 35, WORLD_W - 35); p.y = clamp(p.y + (dir.y * speed + w.y * w.strength * 13) * dt, 35, WORLD_H - 35);
+        if (d < 95 && canSee) { state.hull = clamp(state.hull - 5 * dt, 0, MAX_HULL); for (const s of SUPPLIES) state.cargo[s] = Math.max(0, state.cargo[s] - 0.25 * dt); }
+        if (d < 390 && canSee && p.reload <= 0) { const shotDir = normalize({ x: state.pos.x - p.x, y: state.pos.y - p.y }); state.pirateShots.push({ x: p.x, y: p.y, vx: shotDir.x * 250, vy: shotDir.y * 250, life: 1.85, r: 4 }); p.reload = 1.8 + Math.random() * 1.2; }
+      }
+    }
+
+    function updateProjectiles(dt) {
+      for (const b of state.cannonballs) {
+        b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+        for (const p of state.pirates) if (p.alive && b.life > 0 && dist(b, p) < 28) { b.life = 0; p.hp--; p.hitFlash = 0.18; addParticles(p.x, p.y, 14, "#f97316"); if (p.hp <= 0) { p.alive = false; state.trust += 2; addParticles(p.x, p.y, 30, "#facc15"); } }
+        for (const m of state.seaMonsters) if (b.life > 0 && dist(b, m) < 46) { b.life = 0; m.hp--; m.hitFlash = 0.22; m.dive = 1.2; addParticles(m.x, m.y, 20, "#93c5fd"); if (m.hp <= 0) { m.life = 0; state.trust += 5; addParticles(m.x, m.y, 44, "#67e8f9"); } }
+      }
+      state.cannonballs = state.cannonballs.filter(b => b.life > 0 && b.x > 0 && b.y > 0 && b.x < WORLD_W && b.y < WORLD_H);
+      for (const b of state.pirateShots) { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; if (dist(b, state.pos) < 30) { b.life = 0; state.hull = clamp(state.hull - 10, 0, MAX_HULL); addParticles(state.pos.x, state.pos.y, 18, "#f87171"); } }
+      state.pirateShots = state.pirateShots.filter(b => b.life > 0 && b.x > 0 && b.y > 0 && b.x < WORLD_W && b.y < WORLD_H);
+    }
+
+    function updateParticles(dt) { for (const p of state.particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt; p.vx *= 0.96; p.vy *= 0.96; } state.particles = state.particles.filter(p => p.life > 0); }
+    function updateCamera(dt) { const tx = clamp(state.pos.x - VIEW_W * 0.45, 0, WORLD_W - VIEW_W), ty = clamp(state.pos.y - VIEW_H * 0.55, 0, WORLD_H - VIEW_H); state.cam.x = lerp(state.cam.x, tx, clamp(dt * 5, 0, 1)); state.cam.y = lerp(state.cam.y, ty, clamp(dt * 5, 0, 1)); }
+
+    function updateUI() {
+      if (state.messageTimer <= 0) state.message = "Roam freely. Villages below survival line drift toward chaos. Dock to redistribute food, wood, and medicine.";
+      const chaosCount = state.villages.filter(v => v.chaos).length;
+      ui.message.textContent = state.message; ui.hullValue.textContent = Math.round(state.hull) + "%"; ui.hullFill.style.width = Math.round(state.hull) + "%";
+      ui.cargoValue.textContent = Math.round(cargoTotal()) + "/" + CARGO_CAPACITY; ui.cargoFill.style.width = Math.round(cargoTotal() / CARGO_CAPACITY * 100) + "%";
+      ui.chaosValue.textContent = chaosCount; ui.trustValue.textContent = Math.round(state.trust); ui.weatherValue.textContent = state.weatherAlert || "Clear";
+      if (ui.blessingValue) ui.blessingValue.textContent = blessingSummary();
+      if (ui.friendlyValue) ui.friendlyValue.textContent = state.friendlySailors.filter(s => s.alive).length;
+      ui.speedValue.textContent = "Speed " + Math.round(state.speed); ui.sailStateValue.textContent = state.speedState;
+      const colors = { "In Irons": "#fcd34d", "Close-Hauled": "#fbbf24", "Reach": "#bef264", "Broad Reach": "#a5f3fc", "Running": "#93c5fd" }; ui.sailStateValue.style.color = colors[state.speedState] || "#a5f3fc";
+      renderCargoPanel(); renderVillagePanel(); renderNotifications();
+    }
+
+    function barHtml(value, color) {
+      const ticks = Array.from({ length: 9 }, (_, i) =>
+        `<div class="marker" style="left:${(i + 1) * 10}%;background:rgba(255,255,255,0.18);"></div>`
+      ).join("");
+      return `<div class="bar">
+        <div class="fill" style="width:${clamp(value,0,100)}%;background:${color}"></div>
+        ${ticks}
+        <div class="marker" style="left:${SURVIVAL_LINE}%;background:rgba(255,255,255,0.95);"></div>
+        <div class="marker" style="left:${EXCESS_LINE}%;background:rgba(255,255,255,0.95);"></div>
+      </div>`;
+    }
+    function renderCargoPanel() {
+      const church = (typeof churchStatus === "function" ? churchStatus() : null) || { ready: false, text: "Church: dock at a village." };
+      const churchBg = church.ready ? "#166534" : "#334155";
+      const repairMode = state.acceptRepairs ? "Accept Repairs" : "Refuse Repairs";
+      const repairBg = state.acceptRepairs ? "#166534" : "#7f1d1d";
+
+      ui.cargoPanel.innerHTML = `
+        <p class="mini" style="margin:0 0 8px;color:#fde68a;">Supply policy: ${supplyModeLabel()}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+          <button type="button" onclick="setSupplyMode(1)" style="padding:7px 6px;border-radius:8px;background:${state.supplyMode === 1 ? '#166534' : '#334155'};font-size:12px;">1 Rescue</button>
+          <button type="button" onclick="setSupplyMode(2)" style="padding:7px 6px;border-radius:8px;background:${state.supplyMode === 2 ? '#166534' : '#334155'};font-size:12px;">2 Stable</button>
+          <button type="button" onclick="setSupplyMode(3)" style="padding:7px 6px;border-radius:8px;background:${state.supplyMode === 3 ? '#166534' : '#334155'};font-size:12px;">3 Full</button>
+        </div>
+
+        ${SUPPLIES.map(s => `
+          <div class="row">
+            <div class="mini">${SUPPLY_META[s].label}</div>
+            ${barHtml(state.cargo[s] / CARGO_CAPACITY * 100, SUPPLY_META[s].color)}
+            <div class="mini">${Math.round(state.cargo[s])}</div>
+          </div>`).join("")}
+
+        <p class="mini" style="margin:10px 0 8px;color:#fde68a;">${church.text}</p>
+        <button type="button" onclick="buildChurchAtDockedVillage()" style="width:100%;margin-bottom:8px;padding:7px 8px;border-radius:8px;background:${churchBg};font-size:12px;">4 — Build Church</button>
+        <p class="mini" style="margin:0 0 8px;color:#fde68a;">Town repairs: ${repairMode}</p>
+        <button type="button" onclick="toggleRepairs()" style="width:100%;margin-bottom:10px;padding:7px 8px;border-radius:8px;background:${repairBg};font-size:12px;">5 — ${repairMode}</button>
+      `;
+    }
+
+    function supplyTargetLevel() {
+      if (!state) return STABLE_LINE;
+      if (state.supplyMode === 1) return SURVIVAL_LINE + 6;
+      if (state.supplyMode === 2) return Math.round((SURVIVAL_LINE + EXCESS_LINE) / 2);
+      if (state.supplyMode === 3) return EXCESS_LINE;
+      return STABLE_LINE;
+    }
+
+    function supplyModeLabel() {
+      if (!state) return "Middle";
+      if (state.supplyMode === 1) return `1 — Rescue only (${SURVIVAL_LINE + 6}%)`;
+      if (state.supplyMode === 2) return `2 — Stabilize (${Math.round((SURVIVAL_LINE + EXCESS_LINE) / 2)}%)`;
+      if (state.supplyMode === 3) return `3 — Fill to excess (${EXCESS_LINE}%)`;
+      return "2 — Stabilize";
+    }
+
+    function setSupplyMode(mode) {
+      state.supplyMode = mode;
+      renderCargoPanel();
+    }
+
+    window.setSupplyMode = setSupplyMode;
+
+    function churchUsableWood(v) {
+      if (!v) return 0;
+      return state.cargo.wood + Math.max(0, v.supplies.wood - STABLE_LINE);
+    }
+
+    function churchStatus() {
+      const v = getDockedVillage();
+      if (!v) return { ready: false, text: "Church: dock at a village." };
+      if (v.church) return { ready: false, text: `Church: ${v.name} already has a church.` };
+      const missing = SUPPLIES.filter(s => v.supplies[s] < SURVIVAL_LINE);
+      if (missing.length) {
+        const names = missing.map(s => SUPPLY_META[s].label).join(", ");
+        state.message = `${v.name} must be above poverty in ${names} before a church can be built.`;
+        state.messageTimer = 5;
+        pushNotification(`Church failed at ${v.name}: ${names} below poverty.`, "#f87171");
+        return;
+      }
+
+      if (churchUsableWood(v) < CHURCH_WOOD_COST) {
+        state.message = `Need ${CHURCH_WOOD_COST} usable wood to build a church at ${v.name}. Ship wood plus town wood above stable can be used.`;
+        state.messageTimer = 4;
+        pushNotification(`Church failed at ${v.name}: not enough usable wood.`, "#fbbf24");
+        return;
+      }
+
+      let remainingCost = CHURCH_WOOD_COST;
+      const fromShip = Math.min(state.cargo.wood, remainingCost);
+      state.cargo.wood -= fromShip;
+      remainingCost -= fromShip;
+      if (remainingCost > 0) {
+        v.supplies.wood -= remainingCost;
+      }
+
+      v.church = true;
+      v.chaos = false;
+      v.chaosTimer = 0;
+      v.pirateTimer = 999;
+      for (const s of SUPPLIES) v.stableAlert[s] = false;
+      state.trust += 18;
+      if (state.villages.every(x => x.church)) {
+        state.gameOver = true;
+        state.message = "Victory. Every island has a church, and the trade world is permanently stabilized.";
+        state.messageTimer = 999;
+        pushNotification("Victory: every island has a church.", "#86efac");
+      } else {
+        state.message = `A church was built at ${v.name}. This island will never fall into chaos again.`;
+        state.messageTimer = 5;
+        pushNotification(`${v.name}: church built, island permanently stabilized.`, "#fde68a");
+      }
+      addParticles(v.x, v.y, 70, "#fde68a");
+      renderCargoPanel();
+      renderVillagePanel();
+      renderNotifications();
+    }
+
+    window.buildChurchAtDockedVillage = buildChurchAtDockedVillage;
+
+    function toggleGive(supply) {
+      if (!state || !state.give || !SUPPLIES.includes(supply)) return;
+      state.give[supply] = !state.give[supply];
+      renderCargoPanel();
+    }
+
+    function toggleRepairs() {
+      state.acceptRepairs = !state.acceptRepairs;
+      renderCargoPanel();
+    }
+
+    window.toggleGive = toggleGive;
+    window.toggleRepairs = toggleRepairs;
+    function renderVillagePanel() {
+      const v = getDockedVillage();
+      state.dockedId = v ? v.id : null;
+      ui.dockName.textContent = v ? `${v.name} ${v.chaos ? "— CHAOS" : v.church ? "— church" : "— docked"}` : "Not docked";
+      if (!v) { ui.villagePanel.innerHTML = ""; return; }
+      ui.villagePanel.innerHTML = SUPPLIES.map(s => `<div class="row"><div class="mini">${SUPPLY_META[s].label}</div>${barHtml(v.supplies[s], SUPPLY_META[s].color)}<div class="mini">${Math.round(v.supplies[s])}</div></div>`).join("");
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, VIEW_W, VIEW_H); drawWater(); ctx.save(); ctx.translate(-state.cam.x, -state.cam.y);
+      drawWorldBorder(); drawVillages(); drawWeather(); drawHolySpouts(); if (state.windSight) drawWindSight(); drawTrail(); drawProjectiles(); drawSeaMonsters(); drawFriendlySailors(); drawPirates(); drawOtherPlayers(); drawBoat(state.pos.x, state.pos.y, state.headingAngle, "player", state.speedState, state.flash); drawParticles(); ctx.restore(); drawHUD();
+    }
+
+    function drawWater() { const grad = ctx.createRadialGradient(VIEW_W * 0.5, VIEW_H * 0.45, 80, VIEW_W * 0.5, VIEW_H * 0.5, VIEW_W * 0.75); grad.addColorStop(0, "#155e75"); grad.addColorStop(0.52, "#1e3a8a"); grad.addColorStop(1, "#020617"); ctx.fillStyle = grad; ctx.fillRect(0, 0, VIEW_W, VIEW_H); ctx.save(); ctx.strokeStyle = "rgba(103,232,249,0.08)"; ctx.lineWidth = 2; for (let i = -4; i < 16; i++) { const y = 90 + i * 48 + ((state.time * 16) % 48); ctx.beginPath(); ctx.moveTo(-50, y); ctx.bezierCurveTo(220, y - 45, 470, y + 50, 1040, y - 8); ctx.stroke(); } ctx.restore(); }
+    function drawWorldBorder() { ctx.save(); ctx.strokeStyle = "rgba(255,255,255,0.12)"; ctx.lineWidth = 5; ctx.strokeRect(0, 0, WORLD_W, WORLD_H); ctx.restore(); }
+    function drawVillages() { for (const v of state.villages) drawIsland(v); }
+    function drawIsland(v) { const { x, y, r } = v; ctx.save(); if (v.chaos) { ctx.strokeStyle = "rgba(248,113,113,0.9)"; ctx.lineWidth = 5; ctx.setLineDash([12,10]); ctx.beginPath(); ctx.arc(x, y, r + 24 + Math.sin(state.time * 5) * 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); } if (state.dockedId === v.id) { ctx.strokeStyle = "rgba(134,239,172,0.85)"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(x, y, r + 17, 0, Math.PI * 2); ctx.stroke(); }
+      if (v.church) {
+        ctx.save();
+        ctx.fillStyle = "rgba(2,6,23,0.72)";
+        ctx.strokeStyle = "#fde68a";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x + r * 0.62, y - r * 0.56, 17, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#fef3c7";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(x + r * 0.62, y - r * 0.68);
+        ctx.lineTo(x + r * 0.62, y - r * 0.44);
+        ctx.moveTo(x + r * 0.50, y - r * 0.58);
+        ctx.lineTo(x + r * 0.74, y - r * 0.58);
+        ctx.stroke();
+        ctx.restore();
+      } ctx.fillStyle = "rgba(180,83,9,0.28)"; ellipse(x, y + r * 0.18, r * 1.3, r * 0.82); ctx.fill(); ctx.fillStyle = v.chaos ? "#7f1d1d" : v.color; ctx.strokeStyle = "#166534"; ctx.lineWidth = 3; ellipse(x, y, r * 1.18, r * 0.86); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#92400e"; ctx.strokeStyle = "#451a03"; ctx.lineWidth = 2; roundRect(x - 18, y - 12, 36, 28, 3); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x - 24, y - 12); ctx.lineTo(x, y - 34); ctx.lineTo(x + 24, y - 12); ctx.closePath(); ctx.fillStyle = "#f59e0b"; ctx.fill(); ctx.stroke(); ctx.fillStyle = "#f8fafc"; ctx.font = "800 16px system-ui"; ctx.textAlign = "center"; ctx.fillText(v.name, x, y + r + 27); ctx.font = "700 12px system-ui"; ctx.fillStyle = SUPPLY_META[v.produces].color; ctx.fillText("makes " + v.produces, x, y + r + 43);
+      if (v.church) {
+        const bx = x + r * 0.72;
+        const by = y - r * 0.62;
+        ctx.save();
+        ctx.fillStyle = "rgba(2,6,23,0.86)";
+        ctx.strokeStyle = "#fde68a";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(bx, by, 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.strokeStyle = "#fef3c7";
+        ctx.lineWidth = 5;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(bx, by - 12);
+        ctx.lineTo(bx, by + 12);
+        ctx.moveTo(bx - 10, by - 3);
+        ctx.lineTo(bx + 10, by - 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore(); }
+    function drawWeather() { ctx.save(); for (const e of state.weatherEvents) { const age = e.life / e.maxLife, r = e.r * (1 + Math.sin(state.time * 5 + e.x * 0.01) * 0.04); if (e.type === "squall") { ctx.fillStyle = `rgba(15,23,42,${0.45 * age})`; ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill(); } if (e.type === "spout") { ctx.strokeStyle = `rgba(216,180,254,${0.72 * age})`; ctx.lineWidth = 4; ctx.setLineDash([10,8]); for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(e.x, e.y, r * (0.18 + k * 0.16), e.angle + k, e.angle + k + Math.PI * 1.4); ctx.stroke(); } ctx.setLineDash([]); } if (e.type === "fog") { ctx.fillStyle = `rgba(226,232,240,${0.22 * age})`; ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill(); } if (e.type === "storm") { ctx.fillStyle = `rgba(30,41,59,${0.36 * age})`; ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = `rgba(253,224,71,${0.65 * age})`; ctx.lineWidth = 3; for (let i = 0; i < 5; i++) { const a = e.angle + i * 1.25; const sx = e.x + Math.cos(a) * r * 0.25, sy = e.y + Math.sin(a) * r * 0.25; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(a + 0.5) * 45, sy + Math.sin(a + 0.5) * 45); ctx.lineTo(sx + Math.cos(a - 0.2) * 80, sy + Math.sin(a - 0.2) * 80); ctx.stroke(); } } ctx.fillStyle = "rgba(2,6,23,0.72)"; roundRect(e.x - 54, e.y - r - 28, 108, 22, 8); ctx.fill(); ctx.fillStyle = "#f8fafc"; ctx.font = "800 12px system-ui"; ctx.textAlign = "center"; ctx.fillText(e.name, e.x, e.y - r - 13); } ctx.restore(); }
+    function drawHolySpouts() {
+      if (!state.holySpouts) return;
+      ctx.save();
+      for (const spout of state.holySpouts) {
+        const age = spout.life / spout.maxLife;
+        const r = spout.r * (1 + Math.sin(state.time * 6) * 0.08);
+        ctx.globalAlpha = clamp(age * 1.5, 0, 1);
+
+        const grad = ctx.createRadialGradient(spout.x, spout.y, r * 0.1, spout.x, spout.y, r * 1.8);
+        grad.addColorStop(0, "rgba(253,224,71,0.55)");
+        grad.addColorStop(0.45, "rgba(125,211,252,0.28)");
+        grad.addColorStop(1, "rgba(253,224,71,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(spout.x, spout.y, r * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(253,224,71,0.9)";
+        ctx.lineWidth = 4;
+        ctx.setLineDash([10, 9]);
+        for (let k = 0; k < 5; k++) {
+          ctx.beginPath();
+          ctx.arc(spout.x, spout.y, r * (0.25 + k * 0.16), spout.angle + k * 0.8, spout.angle + k * 0.8 + Math.PI * 1.45);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "rgba(2,6,23,0.75)";
+        roundRect(spout.x - 62, spout.y - r - 34, 124, 24, 8);
+        ctx.fill();
+        ctx.fillStyle = "#fde68a";
+        ctx.font = "900 12px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText("Holy Waterspout", spout.x, spout.y - r - 18);
+      }
+      ctx.restore();
+    }
+
+    function drawWindSight() { ctx.save(); for (const s of getSwirlCores(state.time)) { ctx.strokeStyle = s.spin > 0 ? "rgba(216,180,254,0.28)" : "rgba(125,211,252,0.26)"; ctx.lineWidth = 3; ctx.setLineDash([10,12]); ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 0.28, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(s.x, s.y, s.r * 0.5, 0, Math.PI * 2); ctx.stroke(); } ctx.setLineDash([]); const startX = Math.floor(state.cam.x / 90) * 90 - 90, endX = state.cam.x + VIEW_W + 120, startY = Math.floor(state.cam.y / 80) * 80 - 80, endY = state.cam.y + VIEW_H + 120; let i = 0; for (let y = startY; y <= endY; y += 80) for (let x = startX; x <= endX; x += 90) { drawArrow(x, y, windAt(x, y, state.time), false); if (i % 3 === 0) drawArrow(x + 26, y + 26, windAt(x, y, state.time, 6), true); i++; } ctx.restore(); }
+    function drawArrow(x, y, w, ghost) { const len = ghost ? 24 : 32, alpha = ghost ? 0.25 : 0.74, x2 = x + w.x * len * w.strength, y2 = y + w.y * len * w.strength; ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = ghost ? "#ddd6fe" : "#a5f3fc"; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = ghost ? 2 : 2.8; ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - w.x * 10 - w.y * 6, y2 - w.y * 10 + w.x * 6); ctx.lineTo(x2 - w.x * 10 + w.y * 6, y2 - w.y * 10 - w.x * 6); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    function drawTrail() { if (state.trail.length < 2) return; ctx.save(); ctx.strokeStyle = "rgba(248,250,252,0.55)"; ctx.lineWidth = 3; ctx.setLineDash([8,10]); ctx.lineCap = "round"; ctx.beginPath(); ctx.moveTo(state.trail[0].x, state.trail[0].y); for (const p of state.trail.slice(1)) ctx.lineTo(p.x, p.y); ctx.stroke(); ctx.restore(); }
+    function drawProjectiles() { ctx.save(); for (const b of state.cannonballs) { ctx.fillStyle = "#fef3c7"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#facc15"; ctx.stroke(); } for (const b of state.pirateShots) { ctx.fillStyle = "#fecaca"; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); }
+    function drawSeaMonsters() { for (const m of state.seaMonsters) { const canSee = canSeeTarget(state.pos, m) && m.dive <= 0, d = dist(m, state.pos); if (!canSee) { if (d > 420) continue; ctx.save(); ctx.globalAlpha = clamp((420 - d) / 420, 0.12, 0.45); ctx.strokeStyle = "rgba(147,197,253,0.45)"; ctx.lineWidth = 3; ctx.setLineDash([8,10]); ctx.beginPath(); ctx.ellipse(m.x, m.y, 74 + Math.sin(state.time * 4) * 8, 24, m.angle, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.ellipse(m.x, m.y, 120 + Math.sin(state.time * 3) * 10, 34, m.angle, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); continue; } ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.angle + Math.PI / 2); ctx.fillStyle = m.hitFlash > 0 ? "#dbeafe" : "#172554"; ctx.strokeStyle = "#93c5fd"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -70); ctx.bezierCurveTo(68, -24, 58, 56, 0, 98); ctx.bezierCurveTo(-58, 56, -68, -24, 0, -70); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.arc(-15, -30, 5, 0, Math.PI * 2); ctx.arc(15, -30, 5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#67e8f9"; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-44, 6); ctx.quadraticCurveTo(-86, 36, -62, 82); ctx.moveTo(44, 6); ctx.quadraticCurveTo(86, 36, 62, 82); ctx.stroke(); ctx.restore(); } }
+    function drawFriendlySailors() {
+      for (const sailor of state.friendlySailors) {
+        if (!sailor.alive || !canSeeTarget(state.pos, sailor)) continue;
+        drawBoat(sailor.x, sailor.y, sailor.angle, "friendly", "Friendly", 0);
+      }
+    }
+
+    function drawPirates() { for (const p of state.pirates) { if (!p.alive || !canSeeTarget(state.pos, p)) continue; drawBoat(p.x, p.y, p.angle, "pirate", "Pirate", p.hitFlash); ctx.save(); ctx.translate(p.x, p.y - 42); ctx.fillStyle = "rgba(2,6,23,0.8)"; roundRect(-18, -8, 36, 8, 4); ctx.fill(); ctx.fillStyle = "#ef4444"; roundRect(-18, -8, 36 * (p.hp / p.maxHp), 8, 4); ctx.fill(); ctx.restore(); } }
+    function drawBoat(x, y, headingAngle, type, sailState, flash) { const angle = headingAngle + Math.PI / 2; let hull = type === "pirate" ? "#3f1d1d" : "#5b341e", sail = type === "pirate" ? "#991b1b" : "#f8fafc";
+      if (type === "friendly") { hull = "#164e63"; sail = "#67e8f9"; }
+      if (type === "multiplayer") { hull = "#1d4ed8"; sail = "#bfdbfe"; } if (type === "player") { if (sailState === "Reach") sail = "#bef264"; if (sailState === "Close-Hauled") sail = "#fbbf24"; if (sailState === "In Irons") sail = "#f97316"; } if (flash > 0) sail = "#fef3c7"; ctx.save(); ctx.translate(x, y); ctx.rotate(angle); if (type === "player") { ctx.strokeStyle = "rgba(253,230,138,0.55)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, -42); ctx.lineTo(0, -74); ctx.stroke(); } ctx.fillStyle = hull; ctx.strokeStyle = "#1f0f08"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -26); ctx.bezierCurveTo(22, -3, 16, 24, 0, 33); ctx.bezierCurveTo(-16, 24, -22, -3, 0, -26); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.strokeStyle = "#f8fafc"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, 21); ctx.stroke(); ctx.fillStyle = sail; ctx.globalAlpha = 0.94; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(2, -13); ctx.bezierCurveTo(27, 1, 22, 17, 2, 18); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1; ctx.fillStyle = type === "pirate" ? "#111827" : "#facc15"; ctx.beginPath(); ctx.arc(0, type === "pirate" ? -4 : 0, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+    function drawParticles() { ctx.save(); for (const p of state.particles) { ctx.globalAlpha = clamp(p.life * 2, 0, 1); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); }
+    function drawHUD() { ctx.save(); const heading = angleToVec(state.headingAngle), w = windAt(state.pos.x, state.pos.y, state.time), perf = sailingPerformance(heading, w); const cx = 76, cy = VIEW_H - 78, r = 48; ctx.fillStyle = "rgba(2,6,23,0.72)"; ctx.strokeStyle = "rgba(165,243,252,0.35)"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.strokeStyle = "#a5f3fc"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + w.x * 36, cy + w.y * 36); ctx.stroke(); ctx.fillStyle = "#a5f3fc"; ctx.font = "800 11px system-ui"; ctx.textAlign = "center"; ctx.fillText("WIND", cx, cy + 64); ctx.strokeStyle = "#fde68a"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + heading.x * 31, cy + heading.y * 31); ctx.stroke(); ctx.fillStyle = "rgba(2,6,23,0.68)"; roundRect(330, 14, 340, 58, 14); ctx.fill(); ctx.fillStyle = "#cffafe"; ctx.font = "900 18px system-ui"; ctx.textAlign = "center"; ctx.fillText(state.gameOver ? (state.villages.every(v => v.church) ? "VICTORY" : "WORLD COLLAPSED") : "SUPPLY THE VILLAGES", 500, 36); ctx.fillStyle = "#a5f3fc"; ctx.font = "12px system-ui"; ctx.fillText(`Angle: ${Math.round(perf.deg)}° • Broadside: ${state.reload <= 0 ? "Ready" : "Reloading"}`, 500, 56); ctx.restore(); }
+    function ellipse(x, y, rx, ry) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); }
+    function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); }
+
+    function updateMultiplayer() {
+      // Multiplayer server is optional. This no-op keeps the local prototype running
+      // when opened as a standalone HTML file.
+    }
+
+    function churchUsableTownAmount(v, supply) {
+      if (!v) return 0;
+      // Peaceful towns do not pay for churches. Chaotic towns can contribute
+      // from their own restored stock after they have been brought up to stable.
+      if (v.chaos) return Math.max(0, v.supplies[supply]);
+      return 0;
+    }
+
+    function churchStatus() {
+      const v = getDockedVillage();
+      if (!v) return { ready: false, text: "Church: dock at a village." };
+      if (v.church) return { ready: false, text: `Church: ${v.name} already has a church.` };
+
+      if (v.chaos) {
+        const belowStable = SUPPLIES.filter(s => v.supplies[s] < STABLE_LINE);
+        if (belowStable.length) {
+          const names = belowStable.map(s => SUPPLY_META[s].label).join(", ");
+          return { ready: false, text: `Church: chaotic town must reach stable in ${names}.` };
+        }
+        const lacking = SUPPLIES.filter(s => state.cargo[s] + churchUsableTownAmount(v, s) < CHURCH_RESOURCE_COST);
+        if (lacking.length) {
+          const names = lacking.map(s => SUPPLY_META[s].label).join(", ");
+          return { ready: false, text: `Church: need ${CHURCH_RESOURCE_COST} each. Short on ${names}.` };
+        }
+        return { ready: true, text: `Church: ready at chaotic ${v.name}. Cost can come from player first, then town stock.` };
+      }
+
+      const playerMissing = SUPPLIES.filter(s => state.cargo[s] < CHURCH_RESOURCE_COST);
+      if (playerMissing.length) {
+        const names = playerMissing.map(s => SUPPLY_META[s].label).join(", ");
+        return { ready: false, text: `Church: peaceful town requires player-paid ${CHURCH_RESOURCE_COST} each. Need ${names}.` };
+      }
+      return { ready: true, text: `Church: ready at ${v.name}. Player cost: ${CHURCH_RESOURCE_COST} food, wood, medicine.` };
+    }
+
+    function payChurchCost(v) {
+      for (const s of SUPPLIES) {
+        let remaining = CHURCH_RESOURCE_COST;
+        const fromPlayer = Math.min(state.cargo[s], remaining);
+        state.cargo[s] -= fromPlayer;
+        remaining -= fromPlayer;
+
+        if (remaining > 0) {
+          // Only chaotic towns can contribute; peaceful-town churches are player-paid.
+          const fromTown = Math.min(churchUsableTownAmount(v, s), remaining);
+          v.supplies[s] -= fromTown;
+          remaining -= fromTown;
+        }
+
+        if (remaining > 0.001) return false;
+      }
+      return true;
+    }
+
+    function buildChurchAtDockedVillage() {
+      const v = getDockedVillage();
+      state.dockedId = v ? v.id : null;
+
+      const status = churchStatus();
+      if (!status.ready) {
+        state.message = status.text;
+        state.messageTimer = 5;
+        if (typeof pushNotification === "function") pushNotification(status.text, "#fbbf24");
+        return;
+      }
+
+      if (!payChurchCost(v)) {
+        state.message = `Church failed at ${v.name}: insufficient resources after final check.`;
+        state.messageTimer = 5;
+        if (typeof pushNotification === "function") pushNotification(`Church failed at ${v.name}: insufficient resources.`, "#f87171");
+        return;
+      }
+
+      v.church = true;
+      v.chaos = false;
+      v.chaosTimer = 0;
+      v.pirateTimer = 999;
+      if (v.stableAlert) for (const s of SUPPLIES) v.stableAlert[s] = false;
+      state.trust += 18;
+
+      if (state.villages.every(x => x.church)) {
+        state.gameOver = true;
+        state.message = "Victory. Every island has a church, and the trade world is permanently stabilized.";
+        state.messageTimer = 999;
+        if (typeof pushNotification === "function") pushNotification("Victory: every island has a church.", "#86efac");
+      } else {
+        state.message = `A church was built at ${v.name}. This island will never fall into chaos again.`;
+        state.messageTimer = 5;
+        if (typeof pushNotification === "function") pushNotification(`${v.name}: church built, island permanently stabilized.`, "#fde68a");
+      }
+
+      addParticles(v.x, v.y, 70, "#fde68a");
+      if (typeof renderCargoPanel === "function") renderCargoPanel();
+      if (typeof renderVillagePanel === "function") renderVillagePanel();
+      if (typeof renderNotifications === "function") renderNotifications();
+    }
+
+    window.churchStatus = churchStatus;
+    window.buildChurchAtDockedVillage = buildChurchAtDockedVillage;
+
+    function loop(now) { const dt = Math.min((now - last) / 1000, 0.04); last = now; update(dt); draw(); updateUI(); requestAnimationFrame(loop); }
+    window.addEventListener("keydown", e => {
+      const k = e.key.toLowerCase();
+      keys[k] = true;
+
+      if (k === "1") { e.preventDefault(); setSupplyMode(1); }
+      if (k === "2") { e.preventDefault(); setSupplyMode(2); }
+      if (k === "3") { e.preventDefault(); setSupplyMode(3); }
+      if (k === "4") { e.preventDefault(); buildChurchAtDockedVillage(); }
+      if (k === "5") { e.preventDefault(); toggleRepairs(); }
+
+      if (k === " ") { e.preventDefault(); fireBroadside(); }
+      if (k === "p") state.paused = !state.paused;
+    });
+    window.addEventListener("keyup", e => { keys[e.key.toLowerCase()] = false; });
+    canvas.addEventListener("mousedown", e => { mouseDown = true; setHeadingToward(screenToWorld(e.clientX, e.clientY)); });
+    canvas.addEventListener("mousemove", e => { if (mouseDown) setHeadingToward(screenToWorld(e.clientX, e.clientY)); });
+    window.addEventListener("mouseup", () => { mouseDown = false; });
+    ui.windSightButton.addEventListener("click", () => { state.windSight = !state.windSight; ui.windSightButton.textContent = state.windSight ? "Hide Wind Sight" : "Show Wind Sight"; });
+    ui.resetButton.addEventListener("click", reset);
+
+    // Final church override: keeps church rules simple and reliable.
+    function churchStatus() {
+      const v = getDockedVillage();
+      if (!v) return { ready: false, text: "Church: dock at a village." };
+      if (v.church) return { ready: false, text: `Church: ${v.name} already has a church.` };
+
+      if (v.chaos) {
+        const belowStable = SUPPLIES.filter(s => v.supplies[s] < STABLE_LINE);
+        if (belowStable.length) {
+          const names = belowStable.map(s => SUPPLY_META[s].label).join(", ");
+          return { ready: false, text: `Church: chaotic town must reach stable in ${names}.` };
+        }
+
+        const short = SUPPLIES.filter(s => state.cargo[s] + v.supplies[s] < CHURCH_RESOURCE_COST);
+        if (short.length) {
+          const names = short.map(s => SUPPLY_META[s].label).join(", ");
+          return { ready: false, text: `Church: need 10 each from player + town. Short on ${names}.` };
+        }
+        return { ready: true, text: `Church: ready at chaotic ${v.name}. Cost: 10 each from player + town.` };
+      }
+
+      const playerMissing = SUPPLIES.filter(s => state.cargo[s] < CHURCH_RESOURCE_COST);
+      if (playerMissing.length) {
+        const names = playerMissing.map(s => SUPPLY_META[s].label).join(", ");
+        return { ready: false, text: `Church: peaceful town costs player 10 each. Need ${names}.` };
+      }
+      return { ready: true, text: `Church: ready at ${v.name}. Player cost: 10 each.` };
+    }
+
+    function buildChurchAtDockedVillage() {
+      const v = getDockedVillage();
+      state.dockedId = v ? v.id : null;
+      const status = churchStatus();
+
+      if (!status.ready) {
+        state.message = status.text;
+        state.messageTimer = 5;
+        if (typeof pushNotification === "function") pushNotification(status.text, "#fbbf24");
+        return;
+      }
+
+      for (const s of SUPPLIES) {
+        let cost = CHURCH_RESOURCE_COST;
+        const fromPlayer = Math.min(state.cargo[s], cost);
+        state.cargo[s] -= fromPlayer;
+        cost -= fromPlayer;
+
+        if (cost > 0) {
+          // Only chaotic towns contribute. Peaceful churches already passed player-only check.
+          v.supplies[s] = Math.max(0, v.supplies[s] - cost);
+          cost = 0;
+        }
+      }
+
+      v.church = true;
+      v.chaos = false;
+      v.chaosTimer = 0;
+      v.pirateTimer = 999;
+      if (v.stableAlert) for (const s of SUPPLIES) v.stableAlert[s] = false;
+      state.trust += 18;
+
+      if (state.villages.every(x => x.church)) {
+        state.gameOver = true;
+        state.message = "Victory. Every island has a church, and the trade world is permanently stabilized.";
+        state.messageTimer = 999;
+        if (typeof pushNotification === "function") pushNotification("Victory: every island has a church.", "#86efac");
+      } else {
+        state.message = `A church was built at ${v.name}. This island will never fall into chaos again.`;
+        state.messageTimer = 5;
+        if (typeof pushNotification === "function") pushNotification(`${v.name}: church built, island permanently stabilized.`, "#fde68a");
+      }
+
+      addParticles(v.x, v.y, 70, "#fde68a");
+      if (typeof renderCargoPanel === "function") renderCargoPanel();
+      if (typeof renderVillagePanel === "function") renderVillagePanel();
+      if (typeof renderNotifications === "function") renderNotifications();
+    }
+
+    window.churchStatus = churchStatus;
+    window.buildChurchAtDockedVillage = buildChurchAtDockedVillage;
+
+    function ensureMultiplayer() {
+      if (!state.multiplayer) {
+        state.multiplayer = { connected: false, id: null, ws: null, others: {}, sendTimer: 0, worldTimer: 0, lastWorldHash: "" };
+      }
+      if (!state.multiplayer.others) state.multiplayer.others = {};
+    }
+
+    function worldHash() {
+      if (!state || !state.villages) return "";
+      return JSON.stringify(state.villages.map(v => [
+        v.id,
+        Math.round(v.supplies.food),
+        Math.round(v.supplies.wood),
+        Math.round(v.supplies.medicine),
+        !!v.chaos,
+        !!v.church
+      ]));
+    }
+
+    function collectWorldSnapshot() {
+      return {
+        villages: state.villages.map(v => ({
+          id: v.id,
+          supplies: {
+            food: Number(v.supplies.food) || 0,
+            wood: Number(v.supplies.wood) || 0,
+            medicine: Number(v.supplies.medicine) || 0
+          },
+          chaos: !!v.chaos,
+          church: !!v.church,
+          pirateTimer: Number(v.pirateTimer) || 0
+        })),
+        trust: Number(state.trust) || 0,
+        gameOver: !!state.gameOver,
+        message: state.gameOver ? state.message : ""
+      };
+    }
+
+    function applyWorldSnapshot(world) {
+      if (!world || !Array.isArray(world.villages) || !state || !state.villages) return;
+      for (const incoming of world.villages) {
+        const local = state.villages.find(v => v.id === incoming.id);
+        if (!local) continue;
+        local.supplies.food = clamp(Number(incoming.supplies.food) || 0, 0, 100);
+        local.supplies.wood = clamp(Number(incoming.supplies.wood) || 0, 0, 100);
+        local.supplies.medicine = clamp(Number(incoming.supplies.medicine) || 0, 0, 100);
+        local.chaos = !!incoming.chaos;
+        local.church = !!incoming.church;
+        local.pirateTimer = Number(incoming.pirateTimer) || local.pirateTimer || 0;
+      }
+      state.trust = Math.max(Number(state.trust) || 0, Number(world.trust) || 0);
+      if (world.gameOver) {
+        state.gameOver = true;
+        state.message = world.message || state.message;
+        state.messageTimer = 999;
+      }
+      if (typeof renderVillagePanel === "function") renderVillagePanel();
+      if (typeof renderCargoPanel === "function") renderCargoPanel();
+    }
+
+    function connectMultiplayer() {
+      ensureMultiplayer();
+      if (location.protocol === "file:") return;
+      if (state.multiplayer.ws && state.multiplayer.ws.readyState <= 1) return;
+
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${protocol}://${location.host}`);
+      state.multiplayer.ws = ws;
+
+      ws.addEventListener("open", () => {
+        state.multiplayer.connected = true;
+        ws.send(JSON.stringify({ type: "request_world" }));
+      });
+
+      ws.addEventListener("message", event => {
+        let msg;
+        try { msg = JSON.parse(event.data); } catch { return; }
+
+        if (msg.type === "welcome") {
+          state.multiplayer.id = msg.id;
+          state.multiplayer.isHost = !!msg.isHost;
+        }
+
+        if (msg.type === "players") {
+          state.multiplayer.others = {};
+          for (const p of msg.players || []) {
+            if (p.id !== state.multiplayer.id) state.multiplayer.others[p.id] = p;
+          }
+        }
+
+        if (msg.type === "world" && msg.world) {
+          if (msg.senderId !== state.multiplayer.id) applyWorldSnapshot(msg.world);
+        }
+      });
+
+      ws.addEventListener("close", () => {
+        state.multiplayer.connected = false;
+        state.multiplayer.others = {};
+      });
+    }
+
+    function updateMultiplayer(dt) {
+      ensureMultiplayer();
+      const mp = state.multiplayer;
+      if (!mp.ws || mp.ws.readyState !== WebSocket.OPEN) return;
+
+      mp.sendTimer = (mp.sendTimer || 0) + dt;
+      if (mp.sendTimer >= 0.08) {
+        mp.sendTimer = 0;
+        mp.ws.send(JSON.stringify({
+          type: "state",
+          x: state.pos.x,
+          y: state.pos.y,
+          angle: state.headingAngle,
+          hull: state.hull,
+          cargo: Math.round(cargoTotal()),
+          sailState: state.speedState
+        }));
+      }
+
+      mp.worldTimer = (mp.worldTimer || 0) + dt;
+      const hash = worldHash();
+      const worldChanged = hash !== mp.lastWorldHash;
+      if (mp.worldTimer >= 0.45 && (mp.isHost || worldChanged)) {
+        mp.worldTimer = 0;
+        mp.lastWorldHash = hash;
+        mp.ws.send(JSON.stringify({ type: "world", world: collectWorldSnapshot() }));
+      }
+    }
+
+    function drawOtherPlayers() {
+      if (!state.multiplayer || !state.multiplayer.others) return;
+      for (const id of Object.keys(state.multiplayer.others)) {
+        const p = state.multiplayer.others[id];
+        if (!p || typeof p.x !== "number" || typeof p.y !== "number") continue;
+        drawBoat(p.x, p.y, p.angle || 0, "multiplayer", p.sailState || "Reach", 0);
+        ctx.save();
+        ctx.fillStyle = "rgba(2,6,23,0.75)";
+        roundRect(p.x - 34, p.y - 54, 68, 22, 8);
+        ctx.fill();
+        ctx.fillStyle = "#bfdbfe";
+        ctx.font = "800 12px system-ui";
+        ctx.textAlign = "center";
+        ctx.fillText(`P${String(id).slice(0, 3)}`, p.x, p.y - 39);
+        ctx.restore();
+      }
+    }
+
+    reset(); requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

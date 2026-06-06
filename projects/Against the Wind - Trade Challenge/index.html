@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Against the Wind - Trade Challenge</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+
+      body {
+        background: #020617;
+        color: #e5e7eb;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        padding: 16px;
+      }
+
+      .shell {
+        width: min(1320px, 100%);
+        margin: 0 auto;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .title {
+        margin: 0;
+        font-size: clamp(1.8rem, 3vw, 2.5rem);
+        line-height: 1.1;
+      }
+
+      .sub {
+        margin-top: 6px;
+        color: #a5f3fc;
+      }
+
+      a {
+        color: #67e8f9;
+        text-decoration: none;
+      }
+
+      .frame {
+        width: 100%;
+        min-height: 920px;
+        border: 1px solid rgba(34, 211, 238, 0.25);
+        border-radius: 18px;
+        background: #0f172a;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 10px;
+        }
+
+        .topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .frame {
+          min-height: 760px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="topbar">
+        <div>
+          <h1 class="title">Against the Wind - Trade Challenge</h1>
+          <div class="sub">Alternate sailing version focused on trading and supply balancing.</div>
+        </div>
+        <a href="../../index.html">Back to dashboard</a>
+      </div>
+      <iframe class="frame" src="./Against%20The%20Wind%20V1.html" title="Against the Wind - Trade Challenge"></iframe>
+    </main>
+  </body>
+</html>
